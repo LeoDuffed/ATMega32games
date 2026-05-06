@@ -22,7 +22,7 @@
 #define BTN_LEFT PD2
 #define BTN_RIGHT PD3
 #define BTN_STOP PD4
-# define BTN_MASK ((1 << BTN_LEFT) | (1 << BTN_RIGHT) | (1 << BTN_STOP))
+#define BTN_MASK ((1 << BTN_LEFT) | (1 << BTN_RIGHT) | (1 << BTN_STOP))
 
 #define INPUT_POLL_MS 10
 #define GAME_TICK_MS 180
@@ -33,8 +33,8 @@
 static uint8_t lcd_buffer[504];
 
 #define CELL_SIZE   4
-#define GRID_W (LCD_WIDTH / CELL_SIZE)   // 21
-#define GRID_H (LCD_HEIGHT / CELL_SIZE)  // 12
+#define GRID_W (LCD_WIDTH / CELL_SIZE)
+#define GRID_H (LCD_HEIGHT / CELL_SIZE)
 
 #define PLAYER_Y 10
 #define NUM_OBS 4
@@ -48,56 +48,30 @@ static uint8_t player_x = 10;
 static Point obs[NUM_OBS];
 static uint16_t score = 0;
 static uint8_t game_over = 0;
-static uint8_t game_paused = 0;
+static uint8_t paused = 0;
 
-static void lcd_ce_low(void) { 
-    LCD_PORT &= ~(1 << LCD_CE); 
-}
-static void lcd_ce_high(void) { 
-    LCD_PORT |=  (1 << LCD_CE); 
-}
-static void lcd_dc_cmd(void){ 
-    LCD_PORT &= ~(1 << LCD_DC); 
-}
-static void lcd_dc_data(void){
-    LCD_PORT |=  (1 << LCD_DC); 
-}
-static void lcd_rst_low(void){ 
-    LCD_PORT &= ~(1 << LCD_RST); 
-}
-static void lcd_rst_high(void){ 
-    LCD_PORT |=  (1 << LCD_RST); 
-}
+/* ================= LCD ================= */
 
-static void lcd_clk_low(void){ 
-    LCD_PORT &= ~(1 << LCD_CLK); 
-}
-static void lcd_clk_high(void){ 
-    LCD_PORT |=  (1 << LCD_CLK); 
-}
-
-static void lcd_din_low(void){ 
-    LCD_PORT &= ~(1 << LCD_DIN); 
-}
-static void lcd_din_high(void){
-    LCD_PORT |=  (1 << LCD_DIN); 
-}
+static void lcd_ce_low(void) { LCD_PORT &= ~(1 << LCD_CE); }
+static void lcd_ce_high(void) { LCD_PORT |= (1 << LCD_CE); }
+static void lcd_dc_cmd(void) { LCD_PORT &= ~(1 << LCD_DC); }
+static void lcd_dc_data(void) { LCD_PORT |= (1 << LCD_DC); }
+static void lcd_rst_low(void) { LCD_PORT &= ~(1 << LCD_RST); }
+static void lcd_rst_high(void) { LCD_PORT |= (1 << LCD_RST); }
+static void lcd_clk_low(void) { LCD_PORT &= ~(1 << LCD_CLK); }
+static void lcd_clk_high(void) { LCD_PORT |= (1 << LCD_CLK); }
+static void lcd_din_low(void) { LCD_PORT &= ~(1 << LCD_DIN); }
+static void lcd_din_high(void) { LCD_PORT |= (1 << LCD_DIN); }
 
 static void lcd_send_byte(uint8_t data, uint8_t is_data) {
-    if (is_data) {
-        lcd_dc_data();
-    } else {
-        lcd_dc_cmd();
-    }
+    if (is_data) lcd_dc_data();
+    else lcd_dc_cmd();
 
     lcd_ce_low();
 
     for (uint8_t i = 0; i < 8; i++) {
-        if (data & 0x80){
-            lcd_din_high();
-        } else {             
-            lcd_din_low();
-        }
+        if (data & 0x80) lcd_din_high();
+        else lcd_din_low();
 
         lcd_clk_high();
         _delay_us(1);
@@ -119,25 +93,23 @@ static void lcd_data(uint8_t data) {
 }
 
 static void lcd_init(void) {
-    // Salidas
-    LCD_DDR |= (1 << LCD_RST) | (1 << LCD_CE) | (1 << LCD_DC) | (1 << LCD_DIN) | (1 << LCD_CLK);
+    LCD_DDR |= (1 << LCD_RST) | (1 << LCD_CE) | (1 << LCD_DC) |
+               (1 << LCD_DIN) | (1 << LCD_CLK);
 
     lcd_ce_high();
     lcd_clk_low();
     lcd_rst_high();
 
-    // Reset hardware
     lcd_rst_low();
     _delay_ms(10);
     lcd_rst_high();
 
-    // Inicialización PCD8544
-    lcd_command(0x21); // extended instruction set
-    lcd_command(0xBF); // contraste
-    lcd_command(0x04); // temp coefficient
-    lcd_command(0x14); // bias mode
-    lcd_command(0x20); // basic instruction set
-    lcd_command(0x0C); // normal display mode
+    lcd_command(0x21);
+    lcd_command(0xBF);
+    lcd_command(0x04);
+    lcd_command(0x14);
+    lcd_command(0x20);
+    lcd_command(0x0C);
 
     memset(lcd_buffer, 0x00, sizeof(lcd_buffer));
 }
@@ -147,8 +119,8 @@ static void lcd_clear_buffer(void) {
 }
 
 static void lcd_update(void) {
-    lcd_command(0x40); // Y = 0
-    lcd_command(0x80); // X = 0
+    lcd_command(0x40);
+    lcd_command(0x80);
 
     for (uint16_t i = 0; i < sizeof(lcd_buffer); i++) {
         lcd_data(lcd_buffer[i]);
@@ -160,30 +132,30 @@ static void lcd_set_pixel(uint8_t x, uint8_t y, uint8_t color) {
 
     uint16_t index = x + (y / 8) * LCD_WIDTH;
 
-    if (color) {
-        lcd_buffer[index] |= (1 << (y % 8));
-    } else {
-        lcd_buffer[index] &= ~(1 << (y % 8));
-    }
+    if (color) lcd_buffer[index] |= (1 << (y % 8));
+    else lcd_buffer[index] &= ~(1 << (y % 8));
 }
+
+/* ================= DIBUJO ================= */
 
 static void draw_border(void) {
     for (uint8_t x = 0; x < LCD_WIDTH; x++) {
         lcd_set_pixel(x, 0, 1);
         lcd_set_pixel(x, LCD_HEIGHT - 1, 1);
     }
+
     for (uint8_t y = 0; y < LCD_HEIGHT; y++) {
         lcd_set_pixel(0, y, 1);
         lcd_set_pixel(LCD_WIDTH - 1, y, 1);
     }
 }
 
-static void draw_cell(uint8_t gx, uint8_t gy){
+static void draw_cell(uint8_t gx, uint8_t gy) {
     uint8_t px = gx * CELL_SIZE;
     uint8_t py = gy * CELL_SIZE;
 
-    for(uint8_t y = 0; y < CELL_SIZE; y++){
-        for(uint8_t x = 0; x < CELL_SIZE; x++){
+    for (uint8_t y = 0; y < CELL_SIZE; y++) {
+        for (uint8_t x = 0; x < CELL_SIZE; x++) {
             lcd_set_pixel(px + x, py + y, 1);
         }
     }
@@ -202,17 +174,17 @@ static const uint8_t digits[10][5] = {
     {7,5,7,1,7}  // 9
 };
 
-static void draw_digit(uint8_t x, uint8_t y, uint8_t n){
-    for(uint8_t row = 0; row < 5; row++){
-        for(uint8_t col = 0; col < 3; col++){
-            if(digits[n][row] & (1 << (2 - col))){
+static void draw_digit(uint8_t x, uint8_t y, uint8_t n) {
+    for (uint8_t row = 0; row < 5; row++) {
+        for (uint8_t col = 0; col < 3; col++) {
+            if (digits[n][row] & (1 << (2 - col))) {
                 lcd_set_pixel(x + col, y + row, 1);
             }
         }
     }
 }
 
-static void draw_score(uint8_t value){
+static void draw_score(uint16_t value) {
     uint8_t centenas = (value / 100) % 10;
     uint8_t decenas = (value / 10) % 10;
     uint8_t unidades = value % 10;
@@ -223,25 +195,28 @@ static void draw_score(uint8_t value){
 }
 
 static void game_draw(void) {
-    lcd_clear_buffer(); 
+    lcd_clear_buffer();
     draw_border();
 
     draw_score(score);
+
     draw_cell(player_x, PLAYER_Y);
 
-    for(uint8_t i = 0; i < NUM_OBS; i++){
+    for (uint8_t i = 0; i < NUM_OBS; i++) {
         draw_cell(obs[i].x, obs[i].y);
     }
 
     lcd_update();
 }
 
-static void buttons_init(void){
+/* ================= BOTONES ================= */
+
+static void buttons_init(void) {
     BTN_DDR &= ~BTN_MASK;
-    BTN_PORT |= BTN_MASK;
+    BTN_PORT |= BTN_MASK;   // pull-up interno
 }
 
-static uint8_t buttons_read_raw(void){
+static uint8_t buttons_read_raw(void) {
     uint8_t value = 0;
 
     if (!(BTN_PIN & (1 << BTN_LEFT))) value |= (1 << BTN_LEFT);
@@ -251,19 +226,16 @@ static uint8_t buttons_read_raw(void){
     return value;
 }
 
-static uint8_t buttons_read_debounce(void){
+static uint8_t buttons_read_debounced(void) {
     static uint8_t last_raw = 0;
     static uint8_t stable = 0;
     static uint8_t count = 0;
 
     uint8_t raw = buttons_read_raw();
 
-    if(raw == last_raw){
-        if(count < BTN_DEBOUNCE_TICKS){
-            count++;
-        } else {
-            stable = raw;
-        }
+    if (raw == last_raw) {
+        if (count < BTN_DEBOUNCE_TICKS) count++;
+        else stable = raw;
     } else {
         count = 0;
         last_raw = raw;
@@ -272,20 +244,22 @@ static uint8_t buttons_read_debounce(void){
     return stable;
 }
 
-static void spawn_obstacle(uint8_t i){
+/* ================= JUEGO ================= */
+
+static void spawn_obstacle(uint8_t i) {
     obs[i].x = 1 + (rand() % (GRID_W - 2));
-    obs[i].y = 1;  
+    obs[i].y = 1;
 }
 
-static void game_reset(void){
+static void game_reset(void) {
     player_x = GRID_W / 2;
     score = 0;
     game_over = 0;
-    game_paused = 0;
+    paused = 0;
 
     srand(7);
 
-    for(uint8_t i = 0; i < NUM_OBS; i++){
+    for (uint8_t i = 0; i < NUM_OBS; i++) {
         obs[i].x = 1 + (rand() % (GRID_W - 2));
         obs[i].y = 1 + i * 2;
     }
@@ -293,49 +267,47 @@ static void game_reset(void){
     game_draw();
 }
 
-static void game_update(void){
-    if(game_paused || game_over) return;
+static void game_update(void) {
+    if (paused || game_over) return;
 
-    for(uint8_t i = 0; i < NUM_OBS; i++){
+    for (uint8_t i = 0; i < NUM_OBS; i++) {
         obs[i].y++;
 
-        if(obs[i].x == player_x && obs[i].y == PLAYER_Y){
+        if (obs[i].x == player_x && obs[i].y == PLAYER_Y) {
             game_over = 1;
             return;
         }
 
-        if(obs[i].y >= GRID_H - 1){
+        if (obs[i].y >= GRID_H - 1) {
             score++;
             spawn_obstacle(i);
         }
     }
 }
 
-static void game_input(uint8_t pressed_edges){
-    if(pressed_edges & (1 << BTN_STOP)){
-        if(game_over){
+static void game_input(uint8_t pressed_edges) {
+    if (pressed_edges & (1 << BTN_STOP)) {
+        if (game_over) {
             game_reset();
         } else {
-            game_paused = !game_paused;
+            paused = !paused;
         }
     }
 
-    if(game_paused || game_over) return;
+    if (paused || game_over) return;
 
-    if(pressed_edges & (1 << BTN_LEFT)){
-        if(player_x > 1){
-            player_x--;
-        }
+    if (pressed_edges & (1 << BTN_LEFT)) {
+        if (player_x > 1) player_x--;
     }
 
-    if(pressed_edges & (1 << BTN_RIGHT)){
-        if(player_x < GRID_W - 2){
-            player_x++;
-        }
+    if (pressed_edges & (1 << BTN_RIGHT)) {
+        if (player_x < GRID_W - 2) player_x++;
     }
 }
 
-int main(void){
+/* ================= MAIN ================= */
+
+int main(void) {
     lcd_init();
     buttons_init();
 
@@ -344,8 +316,8 @@ int main(void){
     uint16_t elapsed_ms = 0;
     uint8_t prev_buttons = 0;
 
-    while(1){
-        uint8_t buttons = buttons_read_debounce();
+    while (1) {
+        uint8_t buttons = buttons_read_debounced();
         uint8_t edges = buttons & ~prev_buttons;
         prev_buttons = buttons;
 
@@ -353,7 +325,7 @@ int main(void){
 
         elapsed_ms += INPUT_POLL_MS;
 
-        if(elapsed_ms >= GAME_TICK_MS){
+        if (elapsed_ms >= GAME_TICK_MS) {
             elapsed_ms = 0;
             game_update();
             game_draw();
