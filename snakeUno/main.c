@@ -53,6 +53,7 @@ static Direction dir;
 static Direction next_dir;
 static uint8_t game_over;
 static uint16_t score;
+static uint16_t rng_state __attribute__((section(".noinit")));
 
 static void lcd_ce_low(void)   { LCD_PORT &= ~(1 << LCD_CE); }
 static void lcd_ce_high(void)  { LCD_PORT |=  (1 << LCD_CE); }
@@ -232,6 +233,18 @@ static uint8_t button_pressed(uint8_t pin) {
     return !(BTN_PIN & (1 << pin));
 }
 
+// Entropía simple usando Timer0 + estado de botones
+static void rng_init(void) {
+    // Timer0 en modo normal, prescaler /64
+    TCCR0 = (1 << CS01) | (1 << CS00);
+}
+
+static uint16_t rng_entropy(void) {
+    uint8_t t = TCNT0;
+    uint8_t p = BTN_PIN;
+    return ((uint16_t)t << 8) | (uint16_t)(t ^ p);
+}
+
 static void read_input(void) {
     // Evitar reversa directa
     if (button_pressed(BTN_UP) && dir != DIR_DOWN) {
@@ -254,14 +267,31 @@ static uint8_t snake_hits_itself(uint8_t x, uint8_t y) {
 }
 
 static void place_food(void) {
-    uint8_t ok = 0;
+    Point prev = food;
+    uint16_t attempts = (uint16_t)GRID_W * (uint16_t)GRID_H * 4;
 
-    while (!ok) {
-        food.x = rand() % GRID_W;
-        food.y = rand() % GRID_H;
+    while (attempts--) {
+        uint8_t fx = rand() % GRID_W;
+        uint8_t fy = rand() % GRID_H;
 
-        if (!snake_hits_itself(food.x, food.y)) {
-            ok = 1;
+        if (fx == prev.x && fy == prev.y) continue;
+        if (snake_hits_itself(fx, fy)) continue;
+
+        food.x = fx;
+        food.y = fy;
+        return;
+    }
+
+    // Fallback (si ya casi no hay espacio): permitir repetir posición previa
+    attempts = (uint16_t)GRID_W * (uint16_t)GRID_H * 4;
+    while (attempts--) {
+        uint8_t fx = rand() % GRID_W;
+        uint8_t fy = rand() % GRID_H;
+
+        if (!snake_hits_itself(fx, fy)) {
+            food.x = fx;
+            food.y = fy;
+            return;
         }
     }
 }
@@ -278,7 +308,15 @@ static void game_init(void) {
     dir = DIR_RIGHT;
     next_dir = DIR_RIGHT;
 
-    srand(123); // semilla simple fija
+    food.x = 0xFF;
+    food.y = 0xFF;
+    {
+        uint16_t seed = rng_state ^ rng_entropy();
+        seed ^= (uint16_t)((seed << 7) | (seed >> 9));
+        if (seed == 0) seed = 0xA5A5;
+        rng_state = seed;
+        srand(seed);
+    }
     place_food();
 }
 
@@ -398,6 +436,7 @@ static void game_draw(void) {
 int main(void) {
     lcd_init();
     buttons_init();
+    rng_init();
     game_init();
 
     while (1) {
