@@ -245,9 +245,7 @@ static void read_input(void) {
     }
 }
 
-// ========================
 // Juego
-// ========================
 static uint8_t snake_hits_itself(uint8_t x, uint8_t y) {
     for (uint8_t i = 0; i < snake_length; i++) {
         if (snake[i].x == x && snake[i].y == y) return 1;
@@ -396,9 +394,7 @@ static void game_draw(void) {
     lcd_update();
 }
 
-// ========================
 // Main
-// ========================
 int main(void) {
     lcd_init();
     buttons_init();
