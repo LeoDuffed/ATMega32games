@@ -23,6 +23,13 @@
 #define BTN_DOWN   PD1
 #define BTN_LEFT   PD2
 #define BTN_RIGHT  PD3
+#define BTN_STOP   PD4
+
+#define BTN_MASK ((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_LEFT) | (1 << BTN_RIGHT) | (1 << BTN_STOP))
+
+#define INPUT_POLL_MS 10
+#define GAME_TICK_MS 180
+#define BTN_DEBOUNCE_TICKS 2
 
 #define LCD_WIDTH   84
 #define LCD_HEIGHT  48
@@ -52,8 +59,23 @@ typedef enum {
 static Direction dir;
 static Direction next_dir;
 static uint8_t game_over;
+static uint8_t game_stop;
 static uint16_t score;
 static uint16_t rng_state __attribute__((section(".noinit")));
+
+typedef enum {
+    BTN_IDX_UP,
+    BTN_IDX_DOWN,
+    BTN_IDX_LEFT,
+    BTN_IDX_RIGHT,
+    BTN_IDX_STOP,
+    BTN_COUNT
+} ButtonIndex;
+
+static uint8_t btn_state;
+static uint8_t btn_press_events;
+static uint8_t btn_release_events;
+static uint8_t btn_debounce_cnt[BTN_COUNT];
 
 static void lcd_ce_low(void)   { LCD_PORT &= ~(1 << LCD_CE); }
 static void lcd_ce_high(void)  { LCD_PORT |=  (1 << LCD_CE); }
@@ -192,7 +214,7 @@ static void lcd_draw_number(uint8_t x, uint8_t y, uint16_t n) {
     }
 }
 
-// Letras mínimas necesarias para "GAME OVER"
+// Letras para "GAME OVER"
 static const uint8_t G_[5] = {0x3E,0x41,0x49,0x49,0x7A};
 static const uint8_t A_[5] = {0x7E,0x11,0x11,0x11,0x7E};
 static const uint8_t M_[5] = {0x7F,0x02,0x04,0x02,0x7F};
@@ -201,6 +223,11 @@ static const uint8_t O_[5] = {0x3E,0x41,0x41,0x41,0x3E};
 static const uint8_t V_[5] = {0x1F,0x20,0x40,0x20,0x1F};
 static const uint8_t R_[5] = {0x7F,0x09,0x19,0x29,0x46};
 static const uint8_t space_[5] = {0x00,0x00,0x00,0x00,0x00};
+
+// Letras para "PAUSE"
+static const uint8_t P_[5] = {0x7F,0x09,0x09,0x09,0x06};
+static const uint8_t U_[5] = {0x3F,0x40,0x40,0x40,0x3F};
+static const uint8_t S_[5] = {0x26,0x49,0x49,0x49,0x32};
 
 static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]) {
     for (uint8_t col = 0; col < 5; col++) {
@@ -223,14 +250,90 @@ static void lcd_draw_game_over_text(void) {
     }
 }
 
-// Botones
-static void buttons_init(void) {
-    BTN_DDR &= ~((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_LEFT) | (1 << BTN_RIGHT));
-    BTN_PORT |= (1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_LEFT) | (1 << BTN_RIGHT);
+static void lcd_draw_pause_text(void) {
+    const uint8_t *msg[] = {P_, A_, U_, S_, E_};
+    uint8_t x = 27;
+    uint8_t y = 18;
+
+    for (uint8_t i = 0; i < 5; i++) {
+        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
+    }
 }
 
-static uint8_t button_pressed(uint8_t pin) {
-    return !(BTN_PIN & (1 << pin));
+// Botones
+static void buttons_init(void) {
+    BTN_DDR &= ~(BTN_MASK);
+    // Pull-ups internos (botones a GND)
+    BTN_PORT |= BTN_MASK;
+}
+
+static uint8_t buttons_raw_mask(void) {
+    // 1 = presionado (activo en LOW por pull-up)
+    return (uint8_t)(~BTN_PIN) & (uint8_t)BTN_MASK;
+}
+
+static void buttons_reset(void) {
+    btn_state = buttons_raw_mask();
+    btn_press_events = 0;
+    btn_release_events = 0;
+    for (uint8_t i = 0; i < BTN_COUNT; i++) {
+        btn_debounce_cnt[i] = 0;
+    }
+}
+
+static void buttons_poll(void) {
+    static const uint8_t bits[BTN_COUNT] = {
+        (1 << BTN_UP),
+        (1 << BTN_DOWN),
+        (1 << BTN_LEFT),
+        (1 << BTN_RIGHT),
+        (1 << BTN_STOP),
+    };
+
+    uint8_t sample = buttons_raw_mask();
+
+    for (uint8_t i = 0; i < BTN_COUNT; i++) {
+        uint8_t mask = bits[i];
+        uint8_t raw_down = (sample & mask) ? 1 : 0;
+        uint8_t stable_down = (btn_state & mask) ? 1 : 0;
+
+        if (raw_down == stable_down) {
+            btn_debounce_cnt[i] = 0;
+            continue;
+        }
+
+        if (btn_debounce_cnt[i] < BTN_DEBOUNCE_TICKS) {
+            btn_debounce_cnt[i]++;
+        }
+
+        if (btn_debounce_cnt[i] >= BTN_DEBOUNCE_TICKS) {
+            btn_debounce_cnt[i] = 0;
+            if (raw_down) {
+                btn_state |= mask;
+                btn_press_events |= mask;
+            } else {
+                btn_state &= (uint8_t)~mask;
+                btn_release_events |= mask;
+            }
+        }
+    }
+}
+
+static uint8_t button_down(uint8_t pin) {
+    return (btn_state & (1 << pin)) ? 1 : 0;
+}
+
+static uint8_t button_pressed_event(uint8_t pin) {
+    uint8_t mask = (1 << pin);
+    uint8_t v = (btn_press_events & mask) ? 1 : 0;
+    btn_press_events &= (uint8_t)~mask;
+    return v;
+}
+
+static uint8_t any_button_pressed_event(void) {
+    uint8_t v = btn_press_events;
+    btn_press_events = 0;
+    return v ? 1 : 0;
 }
 
 // Entropía simple usando Timer0 + estado de botones
@@ -246,14 +349,19 @@ static uint16_t rng_entropy(void) {
 }
 
 static void read_input(void) {
+    // Pausa: toggle al presionar
+    if (button_pressed_event(BTN_STOP)) {
+        game_stop ^= 1;
+    }
+
     // Evitar reversa directa
-    if (button_pressed(BTN_UP) && dir != DIR_DOWN) {
+    if (button_down(BTN_UP) && dir != DIR_DOWN) {
         next_dir = DIR_UP;
-    } else if (button_pressed(BTN_DOWN) && dir != DIR_UP) {
+    } else if (button_down(BTN_DOWN) && dir != DIR_UP) {
         next_dir = DIR_DOWN;
-    } else if (button_pressed(BTN_LEFT) && dir != DIR_RIGHT) {
+    } else if (button_down(BTN_LEFT) && dir != DIR_RIGHT) {
         next_dir = DIR_LEFT;
-    } else if (button_pressed(BTN_RIGHT) && dir != DIR_LEFT) {
+    } else if (button_down(BTN_RIGHT) && dir != DIR_LEFT) {
         next_dir = DIR_RIGHT;
     }
 }
@@ -300,6 +408,7 @@ static void game_init(void) {
     snake_length = 3;
     score = 0;
     game_over = 0;
+    game_stop = 0;
 
     snake[0].x = 10; snake[0].y = 6;
     snake[1].x = 9;  snake[1].y = 6;
@@ -322,6 +431,7 @@ static void game_init(void) {
 
 static void game_update(void) {
     if (game_over) return;
+    if (game_stop) return;
 
     dir = next_dir;
 
@@ -427,6 +537,8 @@ static void game_draw(void) {
 
     if (game_over) {
         lcd_draw_game_over_text();
+    } else if (game_stop) {
+        lcd_draw_pause_text();
     }
 
     lcd_update();
@@ -437,26 +549,44 @@ int main(void) {
     lcd_init();
     buttons_init();
     rng_init();
+    buttons_reset();
     game_init();
+    uint8_t prev_game_over = 0;
+    uint8_t restart_armed = 0;
 
     while (1) {
-        read_input();
+        // Al entrar a GAME OVER, limpiar eventos y requerir soltar botones antes de reiniciar
+        if (game_over && !prev_game_over) {
+            buttons_reset();
+            restart_armed = 0;
+        }
+        prev_game_over = game_over;
+
+        // Polling rápido para mejor respuesta + antirrebote
+        for (uint8_t i = 0; i < (GAME_TICK_MS / INPUT_POLL_MS); i++) {
+            buttons_poll();
+
+            if (game_over) {
+                if (!restart_armed) {
+                    if (btn_state == 0) restart_armed = 1; // esperar a que suelten todo
+                } else if (any_button_pressed_event()) {
+                    game_init();
+                    buttons_reset();
+                    prev_game_over = 0;
+                    restart_armed = 0;
+                }
+            } else {
+                read_input();
+            }
+
+            _delay_ms(INPUT_POLL_MS);
+        }
 
         if (!game_over) {
             game_update();
-        } else {
-            // Reinicio simple si presionas cualquier botón
-            if (button_pressed(BTN_UP) || button_pressed(BTN_DOWN) ||
-                button_pressed(BTN_LEFT) || button_pressed(BTN_RIGHT)) {
-                _delay_ms(200);
-                game_init();
-            }
         }
 
         game_draw();
-
-        // Velocidad del juego
-        _delay_ms(180);
     }
 
     return 0;
