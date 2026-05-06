@@ -1,3 +1,12 @@
+/* TODO
+
+    - Que desaparezcan los cuadros hasta el final de la pantalla
+    - mostrar texto de "GAME OVER" y "PAUSE"
+    - arreglar el contador de SCORE (hay que hacerlo como el de snake)
+    - 
+
+*/
+
 #define F_CPU 8000000UL
 
 #include <avr/io.h>
