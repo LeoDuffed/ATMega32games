@@ -1,10 +1,8 @@
 /* TODO
 
     - Que desaparezcan los cuadros hasta el final de la pantalla
-    - mostrar texto de "GAME OVER" y "PAUSE"
-    - arreglar el contador de SCORE 
-    - 
-
+    - que se pueda pausar el juego
+    - que cuando se acabe se pueda voler a jugar
 */
 
 #define F_CPU 8000000UL
@@ -58,6 +56,20 @@ static Point obs[NUM_OBS];
 static uint16_t score = 0;
 static uint8_t game_over = 0;
 static uint8_t game_paused = 0;
+
+typedef enum {
+    BTN_IDX_UP,
+    BTN_IDX_DOWN,
+    BTN_IDX_LEFT,
+    BTN_IDX_RIGHT,
+    BTN_IDX_STOP,
+    BTN_COUNT
+} ButtonIndex;
+
+static uint8_t btn_state;
+static uint8_t btn_press_events;
+static uint8_t btn_release_events;
+static uint8_t btn_debounce_cnt[BTN_COUNT];
 
 static void lcd_ce_low(void) { 
     LCD_PORT &= ~(1 << LCD_CE); 
@@ -236,6 +248,176 @@ static void draw_score(uint8_t x, uint8_t y, uint8_t n){
     }
 }
 
+// Letras para "GAME OVER"
+static const uint8_t G_[5] = {0x3E,0x41,0x49,0x49,0x7A};
+static const uint8_t A_[5] = {0x7E,0x11,0x11,0x11,0x7E};
+static const uint8_t M_[5] = {0x7F,0x02,0x04,0x02,0x7F};
+static const uint8_t E_[5] = {0x7F,0x49,0x49,0x49,0x41};
+static const uint8_t O_[5] = {0x3E,0x41,0x41,0x41,0x3E};
+static const uint8_t V_[5] = {0x1F,0x20,0x40,0x20,0x1F};
+static const uint8_t R_[5] = {0x7F,0x09,0x19,0x29,0x46};
+static const uint8_t space_[5] = {0x00,0x00,0x00,0x00,0x00};
+
+// Letras para "PAUSE"
+static const uint8_t P_[5] = {0x7F,0x09,0x09,0x09,0x06};
+static const uint8_t U_[5] = {0x3F,0x40,0x40,0x40,0x3F};
+static const uint8_t S_[5] = {0x26,0x49,0x49,0x49,0x32};
+
+static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]){
+    for(uint8_t col = 0; col < 5; col++){
+        uint8_t bits = p[col];
+        for(uint8_t row = 0; row < 7; row++){
+            if(bits & (1 << row)){
+                lcd_set_pixel(x + col, y + row, 1);
+            }
+        }
+    }
+}
+
+static void lcd_draw_game_over_text(void){
+    const uint8_t *msg[] = {G_, A_, M_, E_, space_, O_, V_, E_, R_};
+    uint8_t x = 12;
+    uint8_t y = 18;
+
+    for(uint8_t i = 0; i < 9; i++){
+        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
+    }
+}
+
+static void lcd_draw_pause_text(void){
+    const uint8_t *msg[] = {P_, A_, U_, S_, E_};
+    uint8_t x = 27;
+    uint8_t y = 18;
+
+    for(uint8_t i = 0; i < 5; i++){
+        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
+    }
+}
+
+
+static void buttons_init(void){
+    BTN_DDR &= ~BTN_MASK;
+    BTN_PORT |= BTN_MASK;
+}
+
+static uint8_t buttons_raw_mask(void){
+    return (uint8_t)(~BTN_PIN) & (uint8_t) BTN_MASK;
+}
+
+static void buttons_reset(void){
+    btn_state = buttons_raw_mask();
+    btn_press_events = 0;
+    btn_release_events = 0;
+    for(uint8_t i = 0; i < BTN_COUNT; i++){
+        btn_debounce_cnt[i] = 0;
+    }
+}
+
+static void buttons_poll(void){
+    static const uint8_t bits[BTN_COUNT] = {
+        (1 << BTN_LEFT), (1 << BTN_RIGHT), (1 << BTN_STOP)
+    };
+
+    uint8_t sample = buttons_raw_mask();
+
+    for(uint8_t i = 0; i < BTN_COUNT; i++){
+        uint8_t mask = bits[i];
+        uint8_t raw_down = (sample & mask) ? 1 : 0;
+        uint8_t stable_down = (btn_state & mask) ? 1 : 0;
+
+        if(raw_down == stable_down){
+            btn_debounce_cnt[i] = 0;
+            continue;
+        }
+
+        if(btn_debounce_cnt[i] < BTN_DEBOUNCE_TICKS){
+            btn_debounce_cnt[i]++;
+        }
+
+        if(btn_debounce_cnt[i] >= BTN_DEBOUNCE_TICKS){
+            btn_debounce_cnt[i] = 0;
+            if(raw_down){
+                btn_state |= mask;
+                btn_press_events |= mask;
+            } else {
+                btn_state &= (uint8_t)~mask;
+                btn_release_events |= mask;
+            }
+        }
+    }
+}
+
+static uint8_t button_down(uint8_t pin){
+    return(btn_state & (1 << pin)) ? 1 : 0;
+}
+
+static uint8_t button_pressed_event(uint8_t pin){
+    uint8_t mask = (1 << pin);
+    uint8_t v = (btn_press_events & mask) ? 1 : 0;
+    btn_press_events &= (uint8_t)~mask;
+    return v;
+}
+
+static uint8_t any_button_pressed_event(void){
+    uint8_t v = btn_press_events;
+    btn_press_events = 0;
+    return v ? 1 : 0;
+}
+
+static void rng_init(void){
+    TCCR0 = (1 << CS01) | (1 << CS00);
+}
+
+static uint16_t rng_entropy(void){
+    uint8_t t = TCNT0;
+    uint8_t p = BTN_PIN;
+    return((uint16_t)t << 8) | (uint16_t)(t^p);
+}
+
+static uint8_t buttons_read_raw(void){
+    uint8_t value = 0;
+    
+    if (!(BTN_PIN & (1 << BTN_LEFT))) value |= (1 << BTN_LEFT);
+    if (!(BTN_PIN & (1 << BTN_RIGHT))) value |= (1 << BTN_RIGHT);
+    if (!(BTN_PIN & (1 << BTN_STOP))) value |= (1 << BTN_STOP);
+    
+    return value;
+}
+
+static void read_input(void){
+    if(button_pressed_event(BTN_STOP)){
+        game_paused ^= 1;
+    }
+}
+
+/*
+static uint8_t buttons_read_debounce(void){
+    static uint8_t last_raw = 0;
+    static uint8_t stable = 0;
+    static uint8_t count = 0;
+    
+    uint8_t raw = buttons_read_raw();
+    
+    if(raw == last_raw){
+        if(count < BTN_DEBOUNCE_TICKS){
+            count++;
+        } else {
+            stable = raw;
+        }
+    } else {
+        count = 0;
+        last_raw = raw;
+    }
+    
+    return stable;
+}
+*/
+
+static void spawn_obstacle(uint8_t i){
+    obs[i].x = 1 + (rand() % (GRID_W - 2));
+    obs[i].y = 1;  
+}
+
 static void game_draw(void) {
     lcd_clear_buffer(); 
     draw_border();
@@ -247,72 +429,37 @@ static void game_draw(void) {
         draw_cell(obs[i].x, obs[i].y);
     }
 
+    if(game_over){
+        lcd_draw_game_over_text();
+    } else if(game_paused){
+        lcd_draw_pause_text();
+    }
+
     lcd_update();
 }
 
-static void buttons_init(void){
-    BTN_DDR &= ~BTN_MASK;
-    BTN_PORT |= BTN_MASK;
-}
-
-static uint8_t buttons_read_raw(void){
-    uint8_t value = 0;
-
-    if (!(BTN_PIN & (1 << BTN_LEFT))) value |= (1 << BTN_LEFT);
-    if (!(BTN_PIN & (1 << BTN_RIGHT))) value |= (1 << BTN_RIGHT);
-    if (!(BTN_PIN & (1 << BTN_STOP))) value |= (1 << BTN_STOP);
-
-    return value;
-}
-
-static uint8_t buttons_read_debounce(void){
-    static uint8_t last_raw = 0;
-    static uint8_t stable = 0;
-    static uint8_t count = 0;
-
-    uint8_t raw = buttons_read_raw();
-
-    if(raw == last_raw){
-        if(count < BTN_DEBOUNCE_TICKS){
-            count++;
-        } else {
-            stable = raw;
-        }
-    } else {
-        count = 0;
-        last_raw = raw;
-    }
-
-    return stable;
-}
-
-static void spawn_obstacle(uint8_t i){
-    obs[i].x = 1 + (rand() % (GRID_W - 2));
-    obs[i].y = 1;  
-}
-
-static void game_reset(void){
+static void game_init(void){
     player_x = GRID_W / 2;
     score = 0;
     game_over = 0;
     game_paused = 0;
-
+    
     srand(7);
-
+    
     for(uint8_t i = 0; i < NUM_OBS; i++){
         obs[i].x = 1 + (rand() % (GRID_W - 2));
         obs[i].y = 1 + i * 2;
     }
-
+    
     game_draw();
 }
 
 static void game_update(void){
     if(game_paused || game_over) return;
-
+    
     for(uint8_t i = 0; i < NUM_OBS; i++){
         obs[i].y++;
-
+        
         if(obs[i].x == player_x && obs[i].y == PLAYER_Y){
             game_over = 1;
             return;
@@ -328,7 +475,7 @@ static void game_update(void){
 static void game_input(uint8_t pressed_edges){
     if(pressed_edges & (1 << BTN_STOP)){
         if(game_over){
-            game_reset();
+            game_draw();
         } else {
             game_paused = !game_paused;
         }
@@ -352,29 +499,69 @@ static void game_input(uint8_t pressed_edges){
 int main(void){
     lcd_init();
     buttons_init();
-
-    game_reset();
-
+    rng_init();
+    buttons_reset();
+    game_init();
+    uint8_t prev_game_over = 0;
+    uint8_t restart = 0;
     uint16_t elapsed_ms = 0;
     uint8_t prev_buttons = 0;
 
     while(1){
-        uint8_t buttons = buttons_read_debounce();
+        uint8_t buttons = buttons_read_raw();
         uint8_t edges = buttons & ~prev_buttons;
         prev_buttons = buttons;
 
-        game_input(edges);
+        if(game_over && !prev_game_over){
+            buttons_reset();
+            restart = 0;
+        }
+        prev_game_over = game_over;
 
-        elapsed_ms += INPUT_POLL_MS;
+        for(uint8_t i = 0; i < (GAME_TICK_MS / INPUT_POLL_MS); i++){
+            buttons_poll();
 
-        if(elapsed_ms >= GAME_TICK_MS){
-            elapsed_ms = 0;
-            game_update();
-            game_draw();
+            if(game_over){
+                if(!restart){
+                    if(btn_state == 0) restart = 1;
+                } else if(any_button_pressed_event()){
+                    game_init();
+                    buttons_reset();
+                    prev_game_over = 0;
+                    restart = 0;
+                }
+            } else {
+                game_input(edges);
+            }
+
+            _delay_ms(INPUT_POLL_MS);
         }
 
-        _delay_ms(INPUT_POLL_MS);
-    }
+        if(!game_over){
+            game_update();
+        }
 
+        game_draw();
+    }
+    
     return 0;
 }
+
+
+/*
+uint8_t buttons = buttons_read_debounce();
+uint8_t edges = buttons & ~prev_buttons;
+prev_buttons = buttons;
+
+game_input(edges);
+
+elapsed_ms += INPUT_POLL_MS;
+
+if(elapsed_ms >= GAME_TICK_MS){
+    elapsed_ms = 0;
+    game_update();
+    game_draw();
+}
+
+_delay_ms(INPUT_POLL_MS);
+*/
