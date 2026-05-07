@@ -58,8 +58,6 @@ static uint8_t game_over = 0;
 static uint8_t game_paused = 0;
 
 typedef enum {
-    BTN_IDX_UP,
-    BTN_IDX_DOWN,
     BTN_IDX_LEFT,
     BTN_IDX_RIGHT,
     BTN_IDX_STOP,
@@ -315,7 +313,9 @@ static void buttons_reset(void){
 
 static void buttons_poll(void){
     static const uint8_t bits[BTN_COUNT] = {
-        (1 << BTN_LEFT), (1 << BTN_RIGHT), (1 << BTN_STOP)
+        (1 << BTN_LEFT),
+        (1 << BTN_RIGHT),
+        (1 << BTN_STOP),
     };
 
     uint8_t sample = buttons_raw_mask();
@@ -374,45 +374,6 @@ static uint16_t rng_entropy(void){
     return((uint16_t)t << 8) | (uint16_t)(t^p);
 }
 
-static uint8_t buttons_read_raw(void){
-    uint8_t value = 0;
-    
-    if (!(BTN_PIN & (1 << BTN_LEFT))) value |= (1 << BTN_LEFT);
-    if (!(BTN_PIN & (1 << BTN_RIGHT))) value |= (1 << BTN_RIGHT);
-    if (!(BTN_PIN & (1 << BTN_STOP))) value |= (1 << BTN_STOP);
-    
-    return value;
-}
-
-static void read_input(void){
-    if(button_pressed_event(BTN_STOP)){
-        game_paused ^= 1;
-    }
-}
-
-/*
-static uint8_t buttons_read_debounce(void){
-    static uint8_t last_raw = 0;
-    static uint8_t stable = 0;
-    static uint8_t count = 0;
-    
-    uint8_t raw = buttons_read_raw();
-    
-    if(raw == last_raw){
-        if(count < BTN_DEBOUNCE_TICKS){
-            count++;
-        } else {
-            stable = raw;
-        }
-    } else {
-        count = 0;
-        last_raw = raw;
-    }
-    
-    return stable;
-}
-*/
-
 static void spawn_obstacle(uint8_t i){
     obs[i].x = 1 + (rand() % (GRID_W - 2));
     obs[i].y = 1;  
@@ -456,10 +417,10 @@ static void game_init(void){
 
 static void game_update(void){
     if(game_paused || game_over) return;
-    
+
     for(uint8_t i = 0; i < NUM_OBS; i++){
         obs[i].y++;
-        
+
         if(obs[i].x == player_x && obs[i].y == PLAYER_Y){
             game_over = 1;
             return;
@@ -472,24 +433,27 @@ static void game_update(void){
     }
 }
 
-static void game_input(uint8_t pressed_edges){
-    if(pressed_edges & (1 << BTN_STOP)){
-        if(game_over){
-            game_draw();
-        } else {
-            game_paused = !game_paused;
-        }
+static void read_input(void){
+    // Pausa: toggle con evento (antirrebote)
+    if(button_pressed_event(BTN_STOP)){
+        game_paused ^= 1;
     }
 
-    if(game_paused || game_over) return;
+    if(game_paused || game_over){
+        // No acumular movimientos mientras está pausado
+        (void)button_pressed_event(BTN_LEFT);
+        (void)button_pressed_event(BTN_RIGHT);
+        return;
+    }
 
-    if(pressed_edges & (1 << BTN_LEFT)){
+    // Movimiento: un paso por pulsación (no por mantener presionado)
+    if(button_pressed_event(BTN_LEFT)){
         if(player_x > 1){
             player_x--;
         }
     }
 
-    if(pressed_edges & (1 << BTN_RIGHT)){
+    if(button_pressed_event(BTN_RIGHT)){
         if(player_x < GRID_W - 2){
             player_x++;
         }
@@ -504,14 +468,8 @@ int main(void){
     game_init();
     uint8_t prev_game_over = 0;
     uint8_t restart = 0;
-    uint16_t elapsed_ms = 0;
-    uint8_t prev_buttons = 0;
 
     while(1){
-        uint8_t buttons = buttons_read_raw();
-        uint8_t edges = buttons & ~prev_buttons;
-        prev_buttons = buttons;
-
         if(game_over && !prev_game_over){
             buttons_reset();
             restart = 0;
@@ -531,7 +489,7 @@ int main(void){
                     restart = 0;
                 }
             } else {
-                game_input(edges);
+                read_input();
             }
 
             _delay_ms(INPUT_POLL_MS);
@@ -543,25 +501,6 @@ int main(void){
 
         game_draw();
     }
-    
+
     return 0;
 }
-
-
-/*
-uint8_t buttons = buttons_read_debounce();
-uint8_t edges = buttons & ~prev_buttons;
-prev_buttons = buttons;
-
-game_input(edges);
-
-elapsed_ms += INPUT_POLL_MS;
-
-if(elapsed_ms >= GAME_TICK_MS){
-    elapsed_ms = 0;
-    game_update();
-    game_draw();
-}
-
-_delay_ms(INPUT_POLL_MS);
-*/
