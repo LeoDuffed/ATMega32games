@@ -2,7 +2,7 @@
 
     - Que desaparezcan los cuadros hasta el final de la pantalla
     - mostrar texto de "GAME OVER" y "PAUSE"
-    - arreglar el contador de SCORE (hay que hacerlo como el de snake)
+    - arreglar el contador de SCORE 
     - 
 
 */
@@ -198,44 +198,49 @@ static void draw_cell(uint8_t gx, uint8_t gy){
     }
 }
 
-static const uint8_t digits[10][5] = {
-    {7,5,5,5,7}, // 0
-    {2,6,2,2,7}, // 1
-    {7,1,7,4,7}, // 2
-    {7,1,7,1,7}, // 3
-    {5,5,7,1,1}, // 4
-    {7,4,7,1,7}, // 5
-    {7,4,7,5,7}, // 6
-    {7,1,1,1,1}, // 7
-    {7,5,7,5,7}, // 8
-    {7,5,7,1,7}  // 9
+static const uint8_t font5x7[][5] = {
+    {0x3E,0x51,0x49,0x45,0x3E}, // 0
+    {0x00,0x42,0x7F,0x40,0x00}, // 1
+    {0x42,0x61,0x51,0x49,0x46}, // 2
+    {0x21,0x41,0x45,0x4B,0x31}, // 3
+    {0x18,0x14,0x12,0x7F,0x10}, // 4
+    {0x27,0x45,0x45,0x45,0x39}, // 5
+    {0x3C,0x4A,0x49,0x49,0x30}, // 6
+    {0x01,0x71,0x09,0x05,0x03}, // 7
+    {0x36,0x49,0x49,0x49,0x36}, // 8
+    {0x06,0x49,0x49,0x29,0x1E}, // 9
 };
 
-static void draw_digit(uint8_t x, uint8_t y, uint8_t n){
-    for(uint8_t row = 0; row < 5; row++){
-        for(uint8_t col = 0; col < 3; col++){
-            if(digits[n][row] & (1 << (2 - col))){
+static void draw_digit(uint8_t x, uint8_t y, char c){
+    if(c < '0' || c > '9') return;
+    uint8_t idx = c - '0';
+    
+    for(uint8_t col = 0; col < 5; col++){
+        uint8_t bits = font5x7[idx][col];
+        for(uint8_t row = 0; row < 7; row++){
+            if(bits & (1 << row)){
                 lcd_set_pixel(x + col, y + row, 1);
             }
         }
     }
 }
 
-static void draw_score(uint8_t value){
-    uint8_t centenas = (value / 100) % 10;
-    uint8_t decenas = (value / 10) % 10;
-    uint8_t unidades = value % 10;
+static void draw_score(uint8_t x, uint8_t y, uint8_t n){
+    char buf[6];
+    itoa(n, buf, 10);
 
-    draw_digit(3, 2, centenas);
-    draw_digit(8, 2, decenas);
-    draw_digit(13, 2, unidades);
+    uint8_t pos = 0;
+    while(buf[pos]){
+        draw_digit(x + pos * 6, y, buf[pos]);
+        pos++;
+    }
 }
 
 static void game_draw(void) {
     lcd_clear_buffer(); 
     draw_border();
 
-    draw_score(score);
+    draw_score(2,2,score);
     draw_cell(player_x, PLAYER_Y);
 
     for(uint8_t i = 0; i < NUM_OBS; i++){
