@@ -1,10 +1,3 @@
-/* TODO
-
-    - Que desaparezcan los cuadros hasta el final de la pantalla
-    - que se pueda pausar el juego
-    - que cuando se acabe se pueda voler a jugar
-*/
-
 #define F_CPU 8000000UL
 
 #include <avr/io.h>
