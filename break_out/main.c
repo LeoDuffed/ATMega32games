@@ -1,3 +1,10 @@
+/*
+    cuando rompes casilla:
+        - cae poder especial (se multiplica por 2 la pelota)
+        - no todas las casillas valen un punto
+*/
+
+
 #define F_CPU 8000000UL
 
 #include <avr/io.h>
@@ -30,8 +37,9 @@
 #define BTN_MASK ((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_LEFT) | (1 << BTN_RIGHT) | (1 << BTN_STOP))
 
 #define INPUT_POLL_MS 10
-#define GAME_TICK_MS 180
+#define GAME_TICK_MS 100
 #define BTN_DEBOUNCE_TICKS 2
+#define PADDLE_REPEAT_TICKS 2
 
 #define LCD_WIDTH   84
 #define LCD_HEIGHT  48
@@ -267,7 +275,7 @@ static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]){
 static void lcd_draw_game_over_text(void){
     const uint8_t *msg[] = {G_, A_, M_, E_, space_, O_, V_, E_, R_};
     uint8_t x = 12;
-    uint8_t y = 18;
+    uint8_t y = 25;
 
     for(uint8_t i = 0; i < 9; i++){
         lcd_draw_pattern_char(x + i * 6, y, msg[i]);
@@ -277,7 +285,7 @@ static void lcd_draw_game_over_text(void){
 static void lcd_draw_pause_text(void){
     const uint8_t *msg[] = {P_, A_, U_, S_, E_};
     uint8_t x = 27;
-    uint8_t y = 18;
+    uint8_t y = 25;
 
     for(uint8_t i = 0; i < 5; i++){
         lcd_draw_pattern_char(x + i * 6, y, msg[i]);
@@ -478,6 +486,8 @@ static void check_block_collision(void) {
 }
 
 static void read_input(void){
+    static uint8_t paddle_move_cooldown = 0;
+
     // Pausa: toggle con evento (antirrebote)
     if(button_pressed_event(BTN_STOP)){
         game_pause ^= 1;
@@ -487,16 +497,35 @@ static void read_input(void){
         return;
     }
 
-    // Mover paleta mientras se mantenga presionado
-    if(button_down(BTN_LEFT)){
+    if(paddle_move_cooldown){
+        paddle_move_cooldown--;
+    }
+
+    uint8_t want_left = button_down(BTN_LEFT);
+    uint8_t want_right = button_down(BTN_RIGHT);
+
+    // Si no se presiona nada, permitir movimiento inmediato al volver a presionar
+    if(!want_left && !want_right){
+        paddle_move_cooldown = 0;
+        return;
+    }
+
+    // Suavizar: limitar la tasa de movimiento (evita que avance "de más")
+    if(paddle_move_cooldown){
+        return;
+    }
+
+    if(want_left && !want_right){
         if(paddle_x > 2){
             paddle_x--;
         }
-    } else if(button_down(BTN_RIGHT)){
+    } else if(want_right && !want_left){
         if(paddle_x < LCD_WIDTH - PADDLE_W - 2){
             paddle_x++;
         }
     }
+
+    paddle_move_cooldown = PADDLE_REPEAT_TICKS;
 }
 
 static void game_update(void) {
