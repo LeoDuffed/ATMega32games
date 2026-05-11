@@ -24,15 +24,15 @@
 #define LCD_CLK PB7
 
 // botones
-#define BTN_PORT PORTD
-#define BTN_PIN PIND
-#define BTN_DDR DDRD
+#define BTN_PORT PORTA
+#define BTN_PIN PINA
+#define BTN_DDR DDRA
 
-#define BTN_UP PD0
-#define BTN_DOWN PD1
-#define BTN_LEFT PD2
-#define BTN_RIGHT PD3
-#define BTN_STOP PD4
+#define BTN_UP PA0
+#define BTN_DOWN PA1
+#define BTN_LEFT PA2
+#define BTN_RIGHT PA3
+#define BTN_STOP PA4
 
 #define BTN_MASK ((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_LEFT) | (1 << BTN_RIGHT) | (1 << BTN_STOP))
 
