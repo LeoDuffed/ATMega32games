@@ -77,18 +77,38 @@ static uint8_t btn_press_events;
 static uint8_t btn_release_events;
 static uint8_t btn_debounce_cnt[BTN_COUNT];
 
-static void lcd_ce_low(void)   { LCD_PORT &= ~(1 << LCD_CE); }
-static void lcd_ce_high(void)  { LCD_PORT |=  (1 << LCD_CE); }
-static void lcd_dc_cmd(void)   { LCD_PORT &= ~(1 << LCD_DC); }
-static void lcd_dc_data(void)  { LCD_PORT |=  (1 << LCD_DC); }
-static void lcd_rst_low(void)  { LCD_PORT &= ~(1 << LCD_RST); }
-static void lcd_rst_high(void) { LCD_PORT |=  (1 << LCD_RST); }
+static void lcd_ce_low(void){ 
+    LCD_PORT &= ~(1 << LCD_CE); 
+}
+static void lcd_ce_high(void){
+    LCD_PORT |=  (1 << LCD_CE); 
+}
+static void lcd_dc_cmd(void){
+    LCD_PORT &= ~(1 << LCD_DC); 
+}
+static void lcd_dc_data(void){ 
+    LCD_PORT |=  (1 << LCD_DC); 
+}
+static void lcd_rst_low(void){
+    LCD_PORT &= ~(1 << LCD_RST); 
+}
+static void lcd_rst_high(void){ 
+    LCD_PORT |=  (1 << LCD_RST); 
+}
 
-static void lcd_clk_low(void)  { LCD_PORT &= ~(1 << LCD_CLK); }
-static void lcd_clk_high(void) { LCD_PORT |=  (1 << LCD_CLK); }
+static void lcd_clk_low(void){ 
+    LCD_PORT &= ~(1 << LCD_CLK); 
+}
+static void lcd_clk_high(void){ 
+    LCD_PORT |=  (1 << LCD_CLK); 
+}
 
-static void lcd_din_low(void)  { LCD_PORT &= ~(1 << LCD_DIN); }
-static void lcd_din_high(void) { LCD_PORT |=  (1 << LCD_DIN); }
+static void lcd_din_low(void){ 
+    LCD_PORT &= ~(1 << LCD_DIN);
+}
+static void lcd_din_high(void){ 
+    LCD_PORT |=  (1 << LCD_DIN); 
+}
 
 static void lcd_send_byte(uint8_t data, uint8_t is_data) {
     if (is_data) lcd_dc_data();
