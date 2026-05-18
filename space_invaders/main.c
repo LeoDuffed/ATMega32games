@@ -33,6 +33,7 @@
 #define INPUT_POLL_MS 10
 #define GAME_TICK_MS 180
 #define BTN_DEBOUNCE_TICKS 2
+#define SHIP_REPEAT_TICKS 2
 
 #define LCD_WIDTH   84
 #define LCD_HEIGHT  48
@@ -63,11 +64,11 @@ typedef struct {
 #define ALIEN_H 4
 #define ALIEN_GAP_X 2
 #define ALIEN_GAP_Y 2
-#define ALIEN_DROP 3
+#define ALIEN_DROP 2
 
 #define ALIEN_FORMATION_W (ALIEN_COLS * ALIEN_W + (ALIEN_COLS - 1) * ALIEN_GAP_X)
 #define ALIEN_START_X ((LCD_WIDTH - ALIEN_FORMATION_W) / 2)
-#define ALIEN_START_Y 12
+#define ALIEN_START_Y 9
 
 #define ALIEN_SHOT_W 1
 #define ALIEN_SHOT_H 3
@@ -563,7 +564,7 @@ static void game_init(void){
     game_paused = 0;
     game_win = 0;
     score = 0;
-    lives = 3;
+    lives = 1;
 
     {
         uint16_t seed = rng_state ^ rng_entropy();
@@ -610,19 +611,23 @@ static void read_input(void){
     uint8_t want_left = button_down(BTN_LEFT);
     uint8_t want_right = button_down(BTN_RIGHT);
 
-    if(!want_left && !want_right){
+    // Igual que en Breakout: si no se presiona nada, permitir movimiento inmediato al volver a presionar
+    if((!want_left && !want_right) || (want_left && want_right)){
         move_cooldown = 0;
-    } else if(!move_cooldown){
-        if(want_left && !want_right){
-            if(player_x > PLAY_X_MIN){
-                player_x--;
+    } else {
+        // Suavizar: limitar la tasa de movimiento
+        if(!move_cooldown){
+            if(want_left && !want_right){
+                if(player_x > PLAY_X_MIN){
+                    player_x--;
+                }
+            } else if(want_right && !want_left){
+                if(player_x < (uint8_t)(PLAY_X_MAX - SHIP_W + 1)){
+                    player_x++;
+                }
             }
-        } else if(want_right && !want_left){
-            if(player_x < (uint8_t)(PLAY_X_MAX - SHIP_W + 1)){
-                player_x++;
-            }
+            move_cooldown = SHIP_REPEAT_TICKS;
         }
-        move_cooldown = 1;
     }
 
     uint8_t fire = 0;
@@ -751,7 +756,6 @@ static void game_draw(void){
     draw_border();
 
     draw_score(SCORE_X, SCORE_Y, score);
-    draw_score(LIVES_X, LIVES_Y, lives);
 
     for(uint8_t r = 0; r < ALIEN_ROWS; r++){
         for(uint8_t c = 0; c < ALIEN_COLS; c++){
