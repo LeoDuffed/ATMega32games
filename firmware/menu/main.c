@@ -164,6 +164,13 @@ static void lcd_set_pixel(uint8_t x, uint8_t y, uint8_t color) {
         lcd_buffer[index] &= ~(1 << (y % 8));
 }
 
+static const uint8_t J_[5] = {0x20,0x40,0x41,0x3F,0x01};
+static const uint8_t U_[5] = {0x3F,0x40,0x40,0x40,0x3F};
+static const uint8_t G_[5] = {0x3E,0x41,0x49,0x49,0x7A};
+static const uint8_t A_[5] = {0x7E,0x11,0x11,0x11,0x7E};
+static const uint8_t R_[5] = {0x7F,0x09,0x19,0x29,0x46};
+static const uint8_t C_[5] = {0x3E,0x41,0x41,0x41,0x22};
+
 static void draw_border(void) {
     for (uint8_t x = 0; x < LCD_WIDTH; x++) {
         lcd_set_pixel(x, 0, 1);
@@ -175,10 +182,43 @@ static void draw_border(void) {
     }
 }
 
+static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]) {
+    for (uint8_t col = 0; col < 5; col++) {
+        uint8_t bits = p[col];
+        for (uint8_t row = 0; row < 7; row++) {
+            if (bits & (1 << row)) {
+                lcd_set_pixel(x + col, y + row, 1);
+            }
+        }
+    }
+}
+
+static void lcd_draw_jugar_text(void){
+    const uint8_t *msg[] = {J_, U_, G_, A_, R_};
+    uint8_t x = 26;
+    uint8_t y = 14;
+
+    for(uint8_t i = 0; i < 5; i++){
+        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
+    }
+}
+
+static void lcd_draw_cargar_text(void){
+    const uint8_t *msg[] = {C_ ,A_ ,R_ ,G_, A_, R_};
+    uint8_t x = 24;
+    uint8_t y = 27;
+
+    for(uint8_t i = 0; i < 6; i++){
+        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
+    }
+}
+
 static void game_draw(void){
     lcd_clear_buffer();
 
     draw_border();
+    lcd_draw_jugar_text();
+    lcd_draw_cargar_text();
 
     lcd_update();
 }
