@@ -26,7 +26,7 @@
 #define BTN_A PA4
 #define BTN_B PA5
 
-#define BTN_MASK ((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_LEFT) | (1 << BTN_RIGHT) | (1 << BTN_STOP) | (1 << BTN_A))
+#define BTN_MASK ((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_A) | (1 << BTN_B))
 
 #define INPUT_POLL_MS 10
 #define BTN_DEBOUNCE_TICKS 2
@@ -52,6 +52,14 @@ static uint8_t btn_state;
 static uint8_t btn_press_events;
 static uint8_t btn_release_events;
 static uint8_t btn_debounce_cnt[BTN_COUNT];
+
+typedef enum {
+    MENU_ITEM_PLAY,
+    MENU_ITEM_LOAD,
+    MENU_ITEM_COUNT
+} MenuItem;
+
+static uint8_t menu_selection = (uint8_t)MENU_ITEM_PLAY;
 
 static void lcd_ce_low(void){ 
     LCD_PORT &= ~(1 << LCD_CE); 
@@ -213,6 +221,92 @@ static void lcd_draw_cargar_text(void){
     }
 }
 
+// ---------- BOTONES ----------
+
+static void buttons_init(void) {
+    BTN_DDR &= (uint8_t)~BTN_MASK;   // botones como entrada
+    BTN_PORT |= BTN_MASK;            // pull-up interno activado
+}
+
+static uint8_t buttons_raw_mask(void){
+    return (uint8_t)(~BTN_PIN) & (uint8_t)BTN_MASK;
+}
+
+static void buttons_reset(void){
+    btn_state = buttons_raw_mask();
+    btn_press_events = 0;
+    btn_release_events = 0;
+    for(uint8_t i = 0; i < BTN_COUNT; i++){
+        btn_debounce_cnt[i] = 0;
+    }
+}
+
+static void buttons_poll(void){
+    static const uint8_t bits[BTN_COUNT] = {
+        (1 << BTN_UP),
+        (1 << BTN_DOWN),
+        (1 << BTN_A),
+        (1 << BTN_B),
+    };
+
+    uint8_t sample = buttons_raw_mask();
+
+    for(uint8_t i = 0; i < BTN_COUNT; i++){
+        uint8_t mask = bits[i];
+        uint8_t raw_down = (sample & mask) ? 1 : 0;
+        uint8_t stable_down = (btn_state & mask) ? 1 : 0;
+
+        if(raw_down == stable_down){
+            btn_debounce_cnt[i] = 0;
+            continue;
+        }
+
+        if(btn_debounce_cnt[i] < BTN_DEBOUNCE_TICKS){
+            btn_debounce_cnt[i]++;
+        }
+
+        if(btn_debounce_cnt[i] >= BTN_DEBOUNCE_TICKS){
+            btn_debounce_cnt[i] = 0;
+            if(raw_down){
+                btn_state |= mask;
+                btn_press_events |= mask;
+            } else {
+                btn_state &= (uint8_t)~mask;
+                btn_release_events |= mask;
+            }
+        }
+    }
+}
+
+static uint8_t button_pressed_event(uint8_t pin){
+    uint8_t mask = (1 << pin);
+    uint8_t v = (btn_press_events & mask) ? 1 : 0;
+    btn_press_events &= (uint8_t)~mask;
+    return v;
+}
+
+// ---------- MENU ----------
+
+static const uint8_t CURSOR_R_[5] = {0x00, 0x3E, 0x1C, 0x08, 0x00};
+
+static void lcd_draw_cursor(uint8_t x, uint8_t y){
+    lcd_draw_pattern_char(x, y, CURSOR_R_);
+}
+
+static void menu_update(void){
+    if(button_pressed_event(BTN_UP)){
+        if(menu_selection > 0){
+            menu_selection--;
+        }
+    }
+
+    if(button_pressed_event(BTN_DOWN)){
+        if(menu_selection + 1u < (uint8_t)MENU_ITEM_COUNT){
+            menu_selection++;
+        }
+    }
+}
+
 static void game_draw(void){
     lcd_clear_buffer();
 
@@ -220,13 +314,25 @@ static void game_draw(void){
     lcd_draw_jugar_text();
     lcd_draw_cargar_text();
 
+    // Flecha de selección
+    if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
+        lcd_draw_cursor(16, 14);
+    } else {
+        lcd_draw_cursor(16, 27);
+    }
+
     lcd_update();
 }
 
 int main(void){
     lcd_init();
+    buttons_init();
+    buttons_reset();
     while(1){
+        buttons_poll();
+        menu_update();
         game_draw();
+        _delay_ms(INPUT_POLL_MS);
     }
 
     
