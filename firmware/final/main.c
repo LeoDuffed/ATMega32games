@@ -52,6 +52,11 @@ static uint8_t btn_state;
 static uint8_t btn_press_events;
 static uint8_t btn_debounce_cnt[BTN_COUNT];
 
+static uint16_t score1 = 129;
+static uint16_t score2 = 70; 
+static uint16_t score3 = 32;
+static uint16_t score4 = 17;
+
 typedef enum {
     MENU_ITEM_PLAY,
     MENU_ITEM_LOAD,
@@ -62,6 +67,7 @@ static uint8_t menu_selection = (uint8_t)MENU_ITEM_PLAY;
 typedef enum {
     APP_MENU,
     APP_INSTRUCCION,
+    APP_SCORE,
 } AppState;
 
 static AppState app_state = APP_MENU;
@@ -184,6 +190,10 @@ static const uint8_t A_[5] = {0x7E,0x11,0x11,0x11,0x7E};
 static const uint8_t R_[5] = {0x7F,0x09,0x19,0x29,0x46};
 static const uint8_t C_[5] = {0x3E,0x41,0x41,0x41,0x22};
 static const uint8_t B_[5] = {0x7F,0x49,0x49,0x49,0x36};
+static const uint8_t S_[5] = {0x26,0x49,0x49,0x49,0x32};
+static const uint8_t O_[5] = {0x3E,0x41,0x41,0x41,0x3E};
+static const uint8_t E_[5] = {0x7F,0x49,0x49,0x49,0x41};
+
 static const uint8_t a_[5] = {0x20,0x54,0x54,0x54,0x78};
 static const uint8_t b_[5] = {0x7F,0x44,0x44,0x44,0x38};
 static const uint8_t c_[5] = {0x38,0x44,0x44,0x44,0x28};
@@ -199,7 +209,9 @@ static const uint8_t s_[5] = {0x48,0x54,0x54,0x54,0x24};
 static const uint8_t t_[5] = {0x04,0x3F,0x44,0x40,0x20};
 static const uint8_t u_[5] = {0x3C,0x40,0x40,0x20,0x7C};
 static const uint8_t m_[5] = {0x7C,0x04,0x18,0x04,0x78};
+
 static const uint8_t espacio[5]={0,0,0,0,0};
+static const uint8_t punto[5]={0,0,0x60,0x60,0};
 
 static void draw_border(void) {
     for (uint8_t x = 0; x < LCD_WIDTH; x++) {
@@ -301,6 +313,64 @@ static void lcd_draw_text_five(void){
     for(uint8_t i = 0; i < 8; i++){
         lcd_draw_pattern_char(x + i * 6, y, msg[i]);
     }
+}
+
+static void lcd_draw_score_text(void){
+    const uint8_t *msg[] = {S_, C_, O_, R_, E_};
+    uint8_t x = 29;
+    uint8_t y = 2;
+
+    for(uint8_t i = 0; i < 5; i++){
+        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
+    }
+}
+
+static const uint8_t font5x7[][5] = {
+    {0x3E,0x51,0x49,0x45,0x3E}, // 0
+    {0x00,0x42,0x7F,0x40,0x00}, // 1
+    {0x42,0x61,0x51,0x49,0x46}, // 2
+    {0x21,0x41,0x45,0x4B,0x31}, // 3
+    {0x18,0x14,0x12,0x7F,0x10}, // 4
+    {0x27,0x45,0x45,0x45,0x39}, // 5
+    {0x3C,0x4A,0x49,0x49,0x30}, // 6
+    {0x01,0x71,0x09,0x05,0x03}, // 7
+    {0x36,0x49,0x49,0x49,0x36}, // 8
+    {0x06,0x49,0x49,0x29,0x1E}, // 9
+};
+
+static void lcd_draw_char_digit(uint8_t x, uint8_t y, char c){
+    if(c < '0' || c > '9') return;
+    uint8_t idx = c - '0';
+    
+    for(uint8_t col = 0; col < 5; col++){
+        uint8_t bits = font5x7[idx][col];
+        for(uint8_t row = 0; row < 7; row++){
+            if(bits & (1 << row)){
+                lcd_set_pixel(x + col, y + row, 1);
+            }
+        }
+    }
+}
+
+static void lcd_draw_number(uint8_t x, uint8_t y, uint16_t n){
+    char buf[6];
+    itoa(n, buf, 10);
+    
+    uint8_t pos = 0;
+    while(buf[pos]){
+        lcd_draw_char_digit(x + pos * 6, y, buf[pos]);
+        pos++;
+    }
+}
+
+static void lcd_draw_rank(uint8_t x, uint8_t y, uint8_t rank){
+    lcd_draw_number(x, y, rank);
+    lcd_draw_pattern_char(x + 6, y, punto);
+}
+
+static void lcd_draw_score_row(uint8_t y, uint8_t rank, uint16_t score){
+    lcd_draw_rank(3, y, rank);
+    lcd_draw_number(20, y, score);
 }
 
 // botones
@@ -417,6 +487,20 @@ static void instruction_draw(void){
     lcd_update();
 }
 
+static void score_draw(void){
+    lcd_clear_buffer();
+
+    draw_border();
+
+    lcd_draw_score_text();
+    lcd_draw_score_row(12, 1, score1);
+    lcd_draw_score_row(20, 2, score2);
+    lcd_draw_score_row(28, 3, score3);
+    lcd_draw_score_row(36, 4, score4);
+
+    lcd_update();
+}
+
 int main(void){
     lcd_init();
     buttons_init();
@@ -431,6 +515,8 @@ int main(void){
             if(button_pressed_event(BTN_A)){
                 if(menu_selection == (uint8_t)MENU_ITEM_LOAD){
                     app_state = APP_INSTRUCCION;
+                } else if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
+                    app_state = APP_SCORE;
                 }
             }
 
@@ -442,6 +528,8 @@ int main(void){
             }
 
             instruction_draw();
+        } else if(app_state == APP_SCORE){
+            score_draw();
         }
 
         _delay_ms(INPUT_POLL_MS);
