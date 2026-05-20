@@ -50,27 +50,16 @@ typedef enum {
 
 static uint8_t btn_state;
 static uint8_t btn_press_events;
+static uint8_t btn_release_events;
 static uint8_t btn_debounce_cnt[BTN_COUNT];
-
-static uint16_t score1 = 129;
-static uint16_t score2 = 70; 
-static uint16_t score3 = 32;
-static uint16_t score4 = 17;
 
 typedef enum {
     MENU_ITEM_PLAY,
-    MENU_ITEM_LOAD,
+    MENU_ITEM_SCAPE,
     MENU_ITEM_COUNT
 } MenuItem;
+
 static uint8_t menu_selection = (uint8_t)MENU_ITEM_PLAY;
-
-typedef enum {
-    APP_MENU,
-    APP_INSTRUCCION,
-    APP_SCORE,
-} AppState;
-
-static AppState app_state = APP_MENU;
 
 static void lcd_ce_low(void){ 
     LCD_PORT &= ~(1 << LCD_CE); 
@@ -189,29 +178,11 @@ static const uint8_t G_[5] = {0x3E,0x41,0x49,0x49,0x7A};
 static const uint8_t A_[5] = {0x7E,0x11,0x11,0x11,0x7E};
 static const uint8_t R_[5] = {0x7F,0x09,0x19,0x29,0x46};
 static const uint8_t C_[5] = {0x3E,0x41,0x41,0x41,0x22};
-static const uint8_t B_[5] = {0x7F,0x49,0x49,0x49,0x36};
 static const uint8_t S_[5] = {0x26,0x49,0x49,0x49,0x32};
-static const uint8_t O_[5] = {0x3E,0x41,0x41,0x41,0x3E};
-static const uint8_t E_[5] = {0x7F,0x49,0x49,0x49,0x41};
+static const uint8_t L_[5] = {0x7F,0x40,0x40,0x40,0x40};
+static const uint8_t I_[5] = {0x41,0x41,0x7F,0x41,0x41};
 
-static const uint8_t a_[5] = {0x20,0x54,0x54,0x54,0x78};
-static const uint8_t b_[5] = {0x7F,0x44,0x44,0x44,0x38};
-static const uint8_t c_[5] = {0x38,0x44,0x44,0x44,0x28};
-static const uint8_t d_[5] = {0x38,0x44,0x44,0x44,0x7F};
-static const uint8_t e_[5] = {0x38,0x54,0x54,0x54,0x18};
-static const uint8_t i_[5] = {0x00,0x44,0x7D,0x40,0x00};
-static const uint8_t l_[5] = {0x00,0x41,0x7F,0x40,0x00};
-static const uint8_t n_[5] = {0x7C,0x04,0x04,0x04,0x78};
-static const uint8_t o_[5] = {0x38,0x44,0x44,0x44,0x38};
-static const uint8_t p_[5] = {0x7C,0x14,0x14,0x14,0x08};
-static const uint8_t r_[5] = {0x7C,0x08,0x04,0x04,0x08};
-static const uint8_t s_[5] = {0x48,0x54,0x54,0x54,0x24};
-static const uint8_t t_[5] = {0x04,0x3F,0x44,0x40,0x20};
-static const uint8_t u_[5] = {0x3C,0x40,0x40,0x20,0x7C};
-static const uint8_t m_[5] = {0x7C,0x04,0x18,0x04,0x78};
 
-static const uint8_t espacio[5]={0,0,0,0,0};
-static const uint8_t punto[5]={0,0,0x60,0x60,0};
 
 static void draw_border(void) {
     for (uint8_t x = 0; x < LCD_WIDTH; x++) {
@@ -245,135 +216,18 @@ static void lcd_draw_jugar_text(void){
     }
 }
 
-static void lcd_draw_cargar_text(void){
-    const uint8_t *msg[] = {C_ ,A_ ,R_ ,G_, A_, R_};
-    uint8_t x = 24;
+static void lcd_draw_salir_text(void){
+    const uint8_t *msg[] = {S_,A_,L_,I_,R_};
+    uint8_t x = 26;
     uint8_t y = 27;
-
-    for(uint8_t i = 0; i < 6; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-
-static void lcd_draw_B_text(void){
-    const uint8_t *msg[] = {B_};
-    uint8_t x = 75;
-    uint8_t y = 39;
-
-    for(uint8_t i = 0; i < 1; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-
-static void lcd_draw_text_one(void){
-    const uint8_t *msg[] = {C_,o_,n_,e_,c_,t_,a_,espacio,l_,a_};
-    uint8_t x = 6;
-    uint8_t y = 4;
-
-    for(uint8_t i = 0; i < 10; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-
-static void lcd_draw_text_two(void){
-    const uint8_t *msg[] = {c_,o_,n_,s_,o_,l_,a_,espacio,a_,espacio,l_,a_};
-    uint8_t x = 6;
-    uint8_t y = 12;
-
-    for(uint8_t i = 0; i < 12; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-
-static void lcd_draw_text_tree(void){
-    const uint8_t *msg[] = {c_,o_,m_,p_,u_,t_,a_,d_,o_,r_,a_};
-    uint8_t x = 6;
-    uint8_t y = 20;
-
-    for(uint8_t i = 0; i < 11; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-
-static void lcd_draw_text_four(void){
-    const uint8_t *msg[] = {c_,o_,n_,espacio,e_,l_,espacio,c_,a_,b_,l_,e_};
-    uint8_t x = 6;
-    uint8_t y = 28;
-
-    for(uint8_t i = 0; i < 12; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-
-static void lcd_draw_text_five(void){
-    const uint8_t *msg[] = {e_,s_,p_,e_,c_,i_,a_,l_};
-    uint8_t x = 6;
-    uint8_t y = 36;
-
-    for(uint8_t i = 0; i < 8; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-
-static void lcd_draw_score_text(void){
-    const uint8_t *msg[] = {S_, C_, O_, R_, E_};
-    uint8_t x = 29;
-    uint8_t y = 2;
 
     for(uint8_t i = 0; i < 5; i++){
         lcd_draw_pattern_char(x + i * 6, y, msg[i]);
     }
 }
 
-static const uint8_t font5x7[][5] = {
-    {0x3E,0x51,0x49,0x45,0x3E}, // 0
-    {0x00,0x42,0x7F,0x40,0x00}, // 1
-    {0x42,0x61,0x51,0x49,0x46}, // 2
-    {0x21,0x41,0x45,0x4B,0x31}, // 3
-    {0x18,0x14,0x12,0x7F,0x10}, // 4
-    {0x27,0x45,0x45,0x45,0x39}, // 5
-    {0x3C,0x4A,0x49,0x49,0x30}, // 6
-    {0x01,0x71,0x09,0x05,0x03}, // 7
-    {0x36,0x49,0x49,0x49,0x36}, // 8
-    {0x06,0x49,0x49,0x29,0x1E}, // 9
-};
+// ---------- BOTONES ----------
 
-static void lcd_draw_char_digit(uint8_t x, uint8_t y, char c){
-    if(c < '0' || c > '9') return;
-    uint8_t idx = c - '0';
-    
-    for(uint8_t col = 0; col < 5; col++){
-        uint8_t bits = font5x7[idx][col];
-        for(uint8_t row = 0; row < 7; row++){
-            if(bits & (1 << row)){
-                lcd_set_pixel(x + col, y + row, 1);
-            }
-        }
-    }
-}
-
-static void lcd_draw_number(uint8_t x, uint8_t y, uint16_t n){
-    char buf[6];
-    itoa(n, buf, 10);
-    
-    uint8_t pos = 0;
-    while(buf[pos]){
-        lcd_draw_char_digit(x + pos * 6, y, buf[pos]);
-        pos++;
-    }
-}
-
-static void lcd_draw_rank(uint8_t x, uint8_t y, uint8_t rank){
-    lcd_draw_number(x, y, rank);
-    lcd_draw_pattern_char(x + 6, y, punto);
-}
-
-static void lcd_draw_score_row(uint8_t y, uint8_t rank, uint16_t score){
-    lcd_draw_rank(3, y, rank);
-    lcd_draw_number(20, y, score);
-}
-
-// botones
 static void buttons_init(void) {
     BTN_DDR &= (uint8_t)~BTN_MASK;   
     BTN_PORT |= BTN_MASK;            
@@ -386,6 +240,7 @@ static uint8_t buttons_raw_mask(void){
 static void buttons_reset(void){
     btn_state = buttons_raw_mask();
     btn_press_events = 0;
+    btn_release_events = 0;
     for(uint8_t i = 0; i < BTN_COUNT; i++){
         btn_debounce_cnt[i] = 0;
     }
@@ -422,6 +277,7 @@ static void buttons_poll(void){
                 btn_press_events |= mask;
             } else {
                 btn_state &= (uint8_t)~mask;
+                btn_release_events |= mask;
             }
         }
     }
@@ -434,7 +290,7 @@ static uint8_t button_pressed_event(uint8_t pin){
     return v;
 }
 
-// Menu
+// ---------- MENU ----------
 
 static const uint8_t CURSOR_R_[5] = {0x00, 0x3E, 0x1C, 0x08, 0x00};
 
@@ -456,13 +312,14 @@ static void menu_update(void){
     }
 }
 
-static void menu_draw(void){
+static void game_draw(void){
     lcd_clear_buffer();
 
     draw_border();
     lcd_draw_jugar_text();
-    lcd_draw_cargar_text();
+    lcd_draw_salir_text();
 
+    // Flecha de selección
     if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
         lcd_draw_cursor(16, 14);
     } else {
@@ -472,72 +329,17 @@ static void menu_draw(void){
     lcd_update();
 }
 
-static void instruction_draw(void){
-    lcd_clear_buffer();
-
-    draw_border();
-    lcd_draw_B_text();
-
-    lcd_draw_text_one();
-    lcd_draw_text_two();
-    lcd_draw_text_tree();
-    lcd_draw_text_four();
-    lcd_draw_text_five();
-
-    lcd_update();
-}
-
-static void score_draw(void){
-    lcd_clear_buffer();
-
-    draw_border();
-
-    lcd_draw_score_text();
-    lcd_draw_score_row(12, 1, score1);
-    lcd_draw_score_row(20, 2, score2);
-    lcd_draw_score_row(28, 3, score3);
-    lcd_draw_score_row(36, 4, score4);
-
-    lcd_update();
-}
-
 int main(void){
     lcd_init();
     buttons_init();
     buttons_reset();
-
-    while (1) {
+    while(1){
         buttons_poll();
-
-        if(app_state == APP_MENU){
-            menu_update();
-
-            if(button_pressed_event(BTN_A)){
-                if(menu_selection == (uint8_t)MENU_ITEM_LOAD){
-                    app_state = APP_INSTRUCCION;
-                    buttons_reset(); // evita eventos viejos (ej: B) al entrar
-                } else if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
-                    app_state = APP_SCORE;
-                    buttons_reset(); // evita eventos viejos al entrar
-                }
-            }
-
-            menu_draw();
-        
-        } else if(app_state == APP_INSTRUCCION){
-            if(button_pressed_event(BTN_B)){
-                app_state = APP_MENU;
-                buttons_reset(); // evita que el mismo evento afecte al menú
-            }
-
-            instruction_draw();
-        } else if(app_state == APP_SCORE){
-            score_draw();
-        }
-
+        menu_update();
+        game_draw();
         _delay_ms(INPUT_POLL_MS);
-    } 
+    }
 
-    return 0;
     
+    return 0;
 }
