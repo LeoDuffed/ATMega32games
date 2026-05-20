@@ -141,10 +141,6 @@ static void lcd_set_pixel(uint8_t x, uint8_t y, uint8_t color) {
         lcd_buffer[index] &= ~(1 << (y % 8));
 }
 
-static const uint8_t UNO_[5] = {0x00,0x42,0x7F,0x40,0x00}; // 1
-static const uint8_t DOS_[5] = {0x42,0x61,0x51,0x49,0x46}; // 2
-static const uint8_t TRES_[5] = {0x21,0x41,0x45,0x4B,0x31}; // 3
-static const uint8_t CUATRO_[5] = {0x18,0x14,0x12,0x7F,0x10}; // 4
 static const uint8_t S_[5] = {0x26,0x49,0x49,0x49,0x32};
 static const uint8_t C_[5] = {0x3E,0x41,0x41,0x41,0x22};
 static const uint8_t O_[5] = {0x3E,0x41,0x41,0x41,0x3E};
@@ -184,43 +180,6 @@ static void lcd_draw_score_text(void){
     }
 }
 
-static void lcd_draw_1_text(void){
-    const uint8_t *msg[] = {UNO_, punto};
-    uint8_t x = 2;
-    uint8_t y = 12;
-
-    for(uint8_t i = 0; i < 2; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-static void lcd_draw_2_text(void){
-    const uint8_t *msg[] = {DOS_, punto};
-    uint8_t x = 2;
-    uint8_t y = 20;
-
-    for(uint8_t i = 0; i < 2; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-static void lcd_draw_3_text(void){
-    const uint8_t *msg[] = {TRES_, punto};
-    uint8_t x = 2;
-    uint8_t y = 28;
-
-    for(uint8_t i = 0; i < 2; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-static void lcd_draw_4_text(void){
-    const uint8_t *msg[] = {CUATRO_, punto};
-    uint8_t x = 2;
-    uint8_t y = 36;
-
-    for(uint8_t i = 0; i < 2; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-
 static const uint8_t font5x7[][5] = {
     {0x3E,0x51,0x49,0x45,0x3E}, // 0
     {0x00,0x42,0x7F,0x40,0x00}, // 1
@@ -237,7 +196,7 @@ static const uint8_t font5x7[][5] = {
 static void lcd_draw_char_digit(uint8_t x, uint8_t y, char c){
     if(c < '0' || c > '9') return;
     uint8_t idx = c - '0';
-
+    
     for(uint8_t col = 0; col < 5; col++){
         uint8_t bits = font5x7[idx][col];
         for(uint8_t row = 0; row < 7; row++){
@@ -251,12 +210,22 @@ static void lcd_draw_char_digit(uint8_t x, uint8_t y, char c){
 static void lcd_draw_number(uint8_t x, uint8_t y, uint16_t n){
     char buf[6];
     itoa(n, buf, 10);
-
+    
     uint8_t pos = 0;
     while(buf[pos]){
         lcd_draw_char_digit(x + pos * 6, y, buf[pos]);
         pos++;
     }
+}
+
+static void lcd_draw_rank(uint8_t x, uint8_t y, uint8_t rank){
+    lcd_draw_number(x, y, rank);
+    lcd_draw_pattern_char(x + 6, y, punto);
+}
+
+static void lcd_draw_score_row(uint8_t y, uint8_t rank, uint16_t score){
+    lcd_draw_rank(3, y, rank);
+    lcd_draw_number(20, y, score);
 }
 
 static void game_draw(void){
@@ -265,15 +234,12 @@ static void game_draw(void){
     draw_border();
 
     lcd_draw_score_text();
-    lcd_draw_1_text();
-    lcd_draw_2_text();
-    lcd_draw_3_text();
-    lcd_draw_4_text();
 
-    lcd_draw_number(20, 12, score1);
-    lcd_draw_number(20, 20, score2);
-    lcd_draw_number(20, 28, score3);
-    lcd_draw_number(20, 36, score4);
+
+    lcd_draw_score_row(12, 1, score1);
+    lcd_draw_score_row(20, 2, score2);
+    lcd_draw_score_row(28, 3, score3);
+    lcd_draw_score_row(36, 4, score4);
 
     lcd_update();
 }
