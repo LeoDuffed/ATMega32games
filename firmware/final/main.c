@@ -21,6 +21,9 @@
 #define BTN_PIN PINA
 #define BTN_DDR DDRA
 
+#define BTN_UP PA0
+#define BTN_DOWN PA1
+#define BTN_A PA4
 #define BTN_B PA5
 
 #define BTN_MASK ((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_A) | (1 << BTN_B))
@@ -38,14 +41,30 @@ typedef struct {
 } Point;
 
 typedef enum {
+    BTN_IDX_UP,
+    BTN_IDX_DOWN,
+    BTN_IDX_A,
     BTN_IDX_B,
     BTN_COUNT
 } ButtonIndex;
 
 static uint8_t btn_state;
 static uint8_t btn_press_events;
-static uint8_t btn_release_events;
 static uint8_t btn_debounce_cnt[BTN_COUNT];
+
+typedef enum {
+    MENU_ITEM_PLAY,
+    MENU_ITEM_LOAD,
+    MENU_ITEM_COUNT
+} MenuItem;
+static uint8_t menu_selection = (uint8_t)MENU_ITEM_PLAY;
+
+typedef enum {
+    APP_MENU,
+    APP_INSTRUCCION,
+} AppState;
+
+static AppState app_state = APP_MENU;
 
 static void lcd_ce_low(void){ 
     LCD_PORT &= ~(1 << LCD_CE); 
@@ -158,7 +177,11 @@ static void lcd_set_pixel(uint8_t x, uint8_t y, uint8_t color) {
         lcd_buffer[index] &= ~(1 << (y % 8));
 }
 
-// Conecta la consola a la computadora con el cable especial
+static const uint8_t J_[5] = {0x20,0x40,0x41,0x3F,0x01};
+static const uint8_t U_[5] = {0x3F,0x40,0x40,0x40,0x3F};
+static const uint8_t G_[5] = {0x3E,0x41,0x49,0x49,0x7A};
+static const uint8_t A_[5] = {0x7E,0x11,0x11,0x11,0x7E};
+static const uint8_t R_[5] = {0x7F,0x09,0x19,0x29,0x46};
 static const uint8_t C_[5] = {0x3E,0x41,0x41,0x41,0x22};
 static const uint8_t B_[5] = {0x7F,0x49,0x49,0x49,0x36};
 static const uint8_t a_[5] = {0x20,0x54,0x54,0x54,0x78};
@@ -176,7 +199,6 @@ static const uint8_t s_[5] = {0x48,0x54,0x54,0x54,0x24};
 static const uint8_t t_[5] = {0x04,0x3F,0x44,0x40,0x20};
 static const uint8_t u_[5] = {0x3C,0x40,0x40,0x20,0x7C};
 static const uint8_t m_[5] = {0x7C,0x04,0x18,0x04,0x78};
-
 static const uint8_t espacio[5]={0,0,0,0,0};
 
 static void draw_border(void) {
@@ -190,14 +212,34 @@ static void draw_border(void) {
     }
 }
 
-static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]){
-    for(uint8_t col = 0; col < 5; col++){
+static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]) {
+    for (uint8_t col = 0; col < 5; col++) {
         uint8_t bits = p[col];
-        for(uint8_t row = 0; row < 7; row++){
-            if(bits & (1 << row)){
+        for (uint8_t row = 0; row < 7; row++) {
+            if (bits & (1 << row)) {
                 lcd_set_pixel(x + col, y + row, 1);
             }
         }
+    }
+}
+
+static void lcd_draw_jugar_text(void){
+    const uint8_t *msg[] = {J_, U_, G_, A_, R_};
+    uint8_t x = 26;
+    uint8_t y = 14;
+
+    for(uint8_t i = 0; i < 5; i++){
+        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
+    }
+}
+
+static void lcd_draw_cargar_text(void){
+    const uint8_t *msg[] = {C_ ,A_ ,R_ ,G_, A_, R_};
+    uint8_t x = 24;
+    uint8_t y = 27;
+
+    for(uint8_t i = 0; i < 6; i++){
+        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
     }
 }
 
@@ -261,11 +303,109 @@ static void lcd_draw_text_five(void){
     }
 }
 
-static void game_draw(void){
+// botones
+static void buttons_init(void) {
+    BTN_DDR &= (uint8_t)~BTN_MASK;   
+    BTN_PORT |= BTN_MASK;            
+}
+
+static uint8_t buttons_raw_mask(void){
+    return (uint8_t)(~BTN_PIN) & (uint8_t)BTN_MASK;
+}
+
+static void buttons_reset(void){
+    btn_state = buttons_raw_mask();
+    btn_press_events = 0;
+    for(uint8_t i = 0; i < BTN_COUNT; i++){
+        btn_debounce_cnt[i] = 0;
+    }
+}
+
+static void buttons_poll(void){
+    static const uint8_t bits[BTN_COUNT] = {
+        (1 << BTN_UP),
+        (1 << BTN_DOWN),
+        (1 << BTN_A),
+        (1 << BTN_B),
+    };
+
+    uint8_t sample = buttons_raw_mask();
+
+    for(uint8_t i = 0; i < BTN_COUNT; i++){
+        uint8_t mask = bits[i];
+        uint8_t raw_down = (sample & mask) ? 1 : 0;
+        uint8_t stable_down = (btn_state & mask) ? 1 : 0;
+
+        if(raw_down == stable_down){
+            btn_debounce_cnt[i] = 0;
+            continue;
+        }
+
+        if(btn_debounce_cnt[i] < BTN_DEBOUNCE_TICKS){
+            btn_debounce_cnt[i]++;
+        }
+
+        if(btn_debounce_cnt[i] >= BTN_DEBOUNCE_TICKS){
+            btn_debounce_cnt[i] = 0;
+            if(raw_down){
+                btn_state |= mask;
+                btn_press_events |= mask;
+            } else {
+                btn_state &= (uint8_t)~mask;
+            }
+        }
+    }
+}
+
+static uint8_t button_pressed_event(uint8_t pin){
+    uint8_t mask = (1 << pin);
+    uint8_t v = (btn_press_events & mask) ? 1 : 0;
+    btn_press_events &= (uint8_t)~mask;
+    return v;
+}
+
+// Menu
+
+static const uint8_t CURSOR_R_[5] = {0x00, 0x3E, 0x1C, 0x08, 0x00};
+
+static void lcd_draw_cursor(uint8_t x, uint8_t y){
+    lcd_draw_pattern_char(x, y, CURSOR_R_);
+}
+
+static void menu_update(void){
+    if(button_pressed_event(BTN_UP)){
+        if(menu_selection > 0){
+            menu_selection--;
+        }
+    }
+
+    if(button_pressed_event(BTN_DOWN)){
+        if(menu_selection + 1u < (uint8_t)MENU_ITEM_COUNT){
+            menu_selection++;
+        }
+    }
+}
+
+static void menu_draw(void){
     lcd_clear_buffer();
 
     draw_border();
-    //lcd_draw_instrucciones_text();
+    lcd_draw_jugar_text();
+    lcd_draw_cargar_text();
+
+    if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
+        lcd_draw_cursor(16, 14);
+    } else {
+        lcd_draw_cursor(16, 27);
+    }
+
+    lcd_update();
+}
+
+static void instruction_draw(void){
+    lcd_clear_buffer();
+
+    draw_border();
     lcd_draw_B_text();
 
     lcd_draw_text_one();
@@ -279,8 +419,34 @@ static void game_draw(void){
 
 int main(void){
     lcd_init();
-    while(1){
-        game_draw();
+    buttons_init();
+    buttons_reset();
 
-    }
+    while (1) {
+        buttons_poll();
+
+        if(app_state == APP_MENU){
+            menu_update();
+
+            if(button_pressed_event(BTN_A)){
+                if(menu_selection == (uint8_t)MENU_ITEM_LOAD){
+                    app_state = APP_INSTRUCCION;
+                }
+            }
+
+            menu_draw();
+        
+        } else if(app_state == APP_INSTRUCCION){
+            if(button_pressed_event(BTN_B)){
+                app_state = APP_MENU;
+            }
+
+            instruction_draw();
+        }
+
+        _delay_ms(INPUT_POLL_MS);
+    } 
+
+    return 0;
+    
 }

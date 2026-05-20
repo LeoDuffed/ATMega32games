@@ -224,8 +224,8 @@ static void lcd_draw_cargar_text(void){
 // ---------- BOTONES ----------
 
 static void buttons_init(void) {
-    BTN_DDR &= (uint8_t)~BTN_MASK;   // botones como entrada
-    BTN_PORT |= BTN_MASK;            // pull-up interno activado
+    BTN_DDR &= (uint8_t)~BTN_MASK;   
+    BTN_PORT |= BTN_MASK;            
 }
 
 static uint8_t buttons_raw_mask(void){
