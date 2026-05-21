@@ -213,7 +213,7 @@ static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]) {
 static void lcd_draw_seguir_text(void){
     const uint8_t *msg[] = {S_,E_,G_,U_,I_,R_};
     uint8_t x = 26;
-    uint8_t y = 11;
+    uint8_t y = 9;
 
     for(uint8_t i = 0; i < 6; i++){
         lcd_draw_pattern_char(x + i * 6, y, msg[i]);
@@ -223,7 +223,7 @@ static void lcd_draw_seguir_text(void){
 static void lcd_draw_jugando_text(void){
     const uint8_t *msg[] = {J_,U_,G_,A_,N_,D_,O_};
     uint8_t x = 22;
-    uint8_t y = 19;
+    uint8_t y = 17;
 
     for(uint8_t i = 0; i < 7; i++){
         lcd_draw_pattern_char(x + i * 6, y, msg[i]);
@@ -233,7 +233,7 @@ static void lcd_draw_jugando_text(void){
 static void lcd_draw_salir_text(void){
     const uint8_t *msg[] = {S_,A_,L_,I_,R_};
     uint8_t x = 26;
-    uint8_t y = 33;
+    uint8_t y = 31;
 
     for(uint8_t i = 0; i < 5; i++){
         lcd_draw_pattern_char(x + i * 6, y, msg[i]);
@@ -332,9 +332,9 @@ static void game_draw(void){
 
     // Flecha de selección
     if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
-        lcd_draw_cursor(16, 15);
+        lcd_draw_cursor(16, 13);
     } else {
-        lcd_draw_cursor(16, 33);
+        lcd_draw_cursor(16, 31);
     }
 
     lcd_update();
