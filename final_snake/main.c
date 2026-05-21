@@ -93,10 +93,18 @@ typedef enum {
 static uint8_t menu_selection = (uint8_t)MENU_ITEM_PLAY;
 
 typedef enum {
+    END_ITEM_PLAY,
+    END_ITEM_SCAPE,
+    END_ITEM_COUNT
+} EndItem;
+static uint8_t end_selection = (uint8_t)END_ITEM_PLAY;
+
+typedef enum {
     APP_MENU,
     APP_INSTRUCCION,
     APP_SCORE,
     APP_GAME,
+    APP_END,
 } AppState;
 
 static AppState app_state = APP_MENU;
@@ -219,6 +227,7 @@ static void lcd_fill_rect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t co
     }
 }
 
+// Textos que se muestran
 static const uint8_t G_[5] PROGMEM = {0x3E,0x41,0x49,0x49,0x7A};
 static const uint8_t A_[5] PROGMEM = {0x7E,0x11,0x11,0x11,0x7E};
 static const uint8_t M_[5] PROGMEM = {0x7F,0x02,0x04,0x02,0x7F};
@@ -232,6 +241,10 @@ static const uint8_t C_[5] PROGMEM = {0x3E,0x41,0x41,0x41,0x22};
 static const uint8_t B_[5] PROGMEM = {0x7F,0x49,0x49,0x49,0x36};
 static const uint8_t S_[5] PROGMEM = {0x26,0x49,0x49,0x49,0x32};
 static const uint8_t P_[5] PROGMEM = {0x7F,0x09,0x09,0x09,0x06};
+static const uint8_t I_[5] PROGMEM = {0x41,0x41,0x7F,0x41,0x41};
+static const uint8_t N_[5] PROGMEM = {0x7F,0x02,0x04,0x08,0x7F};
+static const uint8_t D_[5] PROGMEM = {0x7F,0x41,0x41,0x22,0x1C};
+static const uint8_t L_[5] PROGMEM = {0x7F,0x40,0x40,0x40,0x40};
 
 static const uint8_t a_[5] PROGMEM = {0x20,0x54,0x54,0x54,0x78};
 static const uint8_t b_[5] PROGMEM = {0x7F,0x44,0x44,0x44,0x38};
@@ -335,6 +348,22 @@ static void lcd_draw_pause_text(void) {
     lcd_draw_pattern_text(27, 18, msg, 5);
 }
 
+static void lcd_draw_seguir_text(void){
+    const uint8_t *msg[] = {S_,E_,G_,U_,I_,R_};
+    lcd_draw_pattern_text(26, 9, msg, 6);
+}
+
+static void lcd_draw_jugando_text(void){
+    const uint8_t *msg[] = {J_,U_,G_,A_,N_,D_,O_};
+    lcd_draw_pattern_text(22, 17, msg, 7);
+}
+
+static void lcd_draw_salir_text(void){
+    const uint8_t *msg[] = {S_,A_,L_,I_,R_};
+    lcd_draw_pattern_text(26, 31, msg, 5);
+}
+
+// numeros que se muestran
 static const uint8_t font5x7[][5] PROGMEM = {
     {0x3E,0x51,0x49,0x45,0x3E}, // 0
     {0x00,0x42,0x7F,0x40,0x00}, // 1
@@ -490,8 +519,7 @@ static void read_input(void) {
     }
 }
 
-// MENU
-
+// menu
 static const uint8_t CURSOR_R_[5] PROGMEM = {0x00, 0x3E, 0x1C, 0x08, 0x00};
 
 static void lcd_draw_cursor(uint8_t x, uint8_t y){
@@ -528,6 +556,7 @@ static void menu_draw(void){
     lcd_update();
 }
 
+// pantalla de instrucciones
 static void instruction_draw(void){
     lcd_clear_buffer();
 
@@ -543,6 +572,7 @@ static void instruction_draw(void){
     lcd_update();
 }
 
+// pantalla de scores
 static void score_draw(void){
     lcd_clear_buffer();
 
@@ -724,6 +754,33 @@ static void game_draw(void) {
     lcd_update();
 }
 
+static void end_game_update(void){
+    if(button_pressed_event(BTN_UP)){
+        if(end_selection > 0) end_selection--;
+    }
+
+    if(button_pressed_event(BTN_DOWN)){
+        if(end_selection + 1u < (uint8_t)END_ITEM_COUNT) end_selection++;
+    }
+}
+// pantalla end game
+static void end_game_draw(void){
+    lcd_clear_buffer();
+
+    draw_border();
+    lcd_draw_seguir_text();
+    lcd_draw_jugando_text();
+    lcd_draw_salir_text();
+
+    if(end_selection == (uint8_t)END_ITEM_PLAY){
+        lcd_draw_cursor(16, 13);
+    } else {
+        lcd_draw_cursor(16, 31);
+    }
+
+    lcd_update();
+}
+
 // Main
 int main(void) {
     lcd_init();
@@ -789,10 +846,8 @@ int main(void) {
                     if (!restart_armed) {
                         if (btn_state == 0) restart_armed = 1; // esperar a que suelten todo
                     } else if (any_button_pressed_event()) {
-                        game_init();
+                        app_state = APP_END;
                         buttons_reset();
-                        prev_game_over = 0;
-                        restart_armed = 0;
                     }
                 } else {
                     read_input();
@@ -807,6 +862,24 @@ int main(void) {
 
             game_draw();
 
+        } else if(app_state == APP_END){
+            end_game_update();
+
+            if(button_pressed_event(BTN_A)){
+                if(end_selection == (uint8_t)END_ITEM_PLAY){
+                    game_init();
+                    prev_game_over = 0;
+                    restart_armed = 0;
+                    app_state = APP_GAME;
+                    buttons_reset();
+                
+                } else if(end_selection == (uint8_t)END_ITEM_SCAPE){
+                    app_state = APP_MENU;
+                    buttons_reset();
+                }
+            }
+
+            end_game_draw();
         }
         
     }
