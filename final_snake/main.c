@@ -754,6 +754,7 @@ static void game_draw(void) {
     lcd_update();
 }
 
+// pantalla end game
 static void end_game_update(void){
     if(button_pressed_event(BTN_UP)){
         if(end_selection > 0) end_selection--;
@@ -763,7 +764,7 @@ static void end_game_update(void){
         if(end_selection + 1u < (uint8_t)END_ITEM_COUNT) end_selection++;
     }
 }
-// pantalla end game
+
 static void end_game_draw(void){
     lcd_clear_buffer();
 
