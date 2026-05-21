@@ -172,13 +172,17 @@ static void lcd_set_pixel(uint8_t x, uint8_t y, uint8_t color) {
         lcd_buffer[index] &= ~(1 << (y % 8));
 }
 
+// seguir jugando
 static const uint8_t J_[5] = {0x20,0x40,0x41,0x3F,0x01};
 static const uint8_t U_[5] = {0x3F,0x40,0x40,0x40,0x3F};
 static const uint8_t G_[5] = {0x3E,0x41,0x49,0x49,0x7A};
 static const uint8_t A_[5] = {0x7E,0x11,0x11,0x11,0x7E};
 static const uint8_t R_[5] = {0x7F,0x09,0x19,0x29,0x46};
-static const uint8_t C_[5] = {0x3E,0x41,0x41,0x41,0x22};
 static const uint8_t S_[5] = {0x26,0x49,0x49,0x49,0x32};
+static const uint8_t E_[5] = {0x7F,0x49,0x49,0x49,0x41};
+static const uint8_t N_[5] = {0x7F,0x02,0x04,0x08,0x7F};
+static const uint8_t O_[5] = {0x3E,0x41,0x41,0x41,0x3E};
+static const uint8_t D_[5] = {0x7F,0x41,0x41,0x22,0x1C};
 static const uint8_t L_[5] = {0x7F,0x40,0x40,0x40,0x40};
 static const uint8_t I_[5] = {0x41,0x41,0x7F,0x41,0x41};
 
@@ -206,12 +210,22 @@ static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]) {
     }
 }
 
-static void lcd_draw_jugar_text(void){
-    const uint8_t *msg[] = {J_, U_, G_, A_, R_};
+static void lcd_draw_seguir_text(void){
+    const uint8_t *msg[] = {S_,E_,G_,U_,I_,R_};
     uint8_t x = 26;
-    uint8_t y = 14;
+    uint8_t y = 11;
 
-    for(uint8_t i = 0; i < 5; i++){
+    for(uint8_t i = 0; i < 6; i++){
+        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
+    }
+}
+
+static void lcd_draw_jugando_text(void){
+    const uint8_t *msg[] = {J_,U_,G_,A_,N_,D_,O_};
+    uint8_t x = 22;
+    uint8_t y = 19;
+
+    for(uint8_t i = 0; i < 7; i++){
         lcd_draw_pattern_char(x + i * 6, y, msg[i]);
     }
 }
@@ -219,14 +233,12 @@ static void lcd_draw_jugar_text(void){
 static void lcd_draw_salir_text(void){
     const uint8_t *msg[] = {S_,A_,L_,I_,R_};
     uint8_t x = 26;
-    uint8_t y = 27;
+    uint8_t y = 33;
 
     for(uint8_t i = 0; i < 5; i++){
         lcd_draw_pattern_char(x + i * 6, y, msg[i]);
     }
 }
-
-// ---------- BOTONES ----------
 
 static void buttons_init(void) {
     BTN_DDR &= (uint8_t)~BTN_MASK;   
@@ -290,8 +302,6 @@ static uint8_t button_pressed_event(uint8_t pin){
     return v;
 }
 
-// ---------- MENU ----------
-
 static const uint8_t CURSOR_R_[5] = {0x00, 0x3E, 0x1C, 0x08, 0x00};
 
 static void lcd_draw_cursor(uint8_t x, uint8_t y){
@@ -316,14 +326,15 @@ static void game_draw(void){
     lcd_clear_buffer();
 
     draw_border();
-    lcd_draw_jugar_text();
+    lcd_draw_seguir_text();
+    lcd_draw_jugando_text();
     lcd_draw_salir_text();
 
     // Flecha de selección
     if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
-        lcd_draw_cursor(16, 14);
+        lcd_draw_cursor(16, 15);
     } else {
-        lcd_draw_cursor(16, 27);
+        lcd_draw_cursor(16, 33);
     }
 
     lcd_update();
