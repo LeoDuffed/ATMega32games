@@ -37,8 +37,8 @@
 static uint8_t lcd_buffer[504];
 
 #define CELL_SIZE   4
-#define GRID_W      (LCD_WIDTH / CELL_SIZE)   // 21
-#define GRID_H      (LCD_HEIGHT / CELL_SIZE)  // 12
+#define GRID_W (LCD_WIDTH / CELL_SIZE)   // 21
+#define GRID_H (LCD_HEIGHT / CELL_SIZE)  // 12
 #define MAX_SNAKE   64
 
 typedef struct {
@@ -78,6 +78,27 @@ static uint8_t btn_state;
 static uint8_t btn_press_events;
 static uint8_t btn_release_events;
 static uint8_t btn_debounce_cnt[BTN_COUNT];
+
+static uint16_t score1 = 129;
+static uint16_t score2 = 70; 
+static uint16_t score3 = 32;
+static uint16_t score4 = 17;
+
+typedef enum {
+    MENU_ITEM_PLAY,
+    MENU_ITEM_LOAD,
+    MENU_ITEM_COUNT
+} MenuItem;
+static uint8_t menu_selection = (uint8_t)MENU_ITEM_PLAY;
+
+typedef enum {
+    APP_MENU,
+    APP_INSTRUCCION,
+    APP_SCORE,
+    APP_GAME,
+} AppState;
+
+static AppState app_state = APP_MENU;
 
 static void lcd_ce_low(void){ 
     LCD_PORT &= ~(1 << LCD_CE); 
@@ -197,6 +218,122 @@ static void lcd_fill_rect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t co
     }
 }
 
+static const uint8_t G_[5] = {0x3E,0x41,0x49,0x49,0x7A};
+static const uint8_t A_[5] = {0x7E,0x11,0x11,0x11,0x7E};
+static const uint8_t M_[5] = {0x7F,0x02,0x04,0x02,0x7F};
+static const uint8_t E_[5] = {0x7F,0x49,0x49,0x49,0x41};
+static const uint8_t O_[5] = {0x3E,0x41,0x41,0x41,0x3E};
+static const uint8_t V_[5] = {0x1F,0x20,0x40,0x20,0x1F};
+static const uint8_t R_[5] = {0x7F,0x09,0x19,0x29,0x46};
+static const uint8_t J_[5] = {0x20,0x40,0x41,0x3F,0x01};
+static const uint8_t U_[5] = {0x3F,0x40,0x40,0x40,0x3F};
+static const uint8_t C_[5] = {0x3E,0x41,0x41,0x41,0x22};
+static const uint8_t B_[5] = {0x7F,0x49,0x49,0x49,0x36};
+static const uint8_t S_[5] = {0x26,0x49,0x49,0x49,0x32};
+static const uint8_t P_[5] = {0x7F,0x09,0x09,0x09,0x06};
+
+static const uint8_t a_[5] = {0x20,0x54,0x54,0x54,0x78};
+static const uint8_t b_[5] = {0x7F,0x44,0x44,0x44,0x38};
+static const uint8_t c_[5] = {0x38,0x44,0x44,0x44,0x28};
+static const uint8_t d_[5] = {0x38,0x44,0x44,0x44,0x7F};
+static const uint8_t e_[5] = {0x38,0x54,0x54,0x54,0x18};
+static const uint8_t i_[5] = {0x00,0x44,0x7D,0x40,0x00};
+static const uint8_t l_[5] = {0x00,0x41,0x7F,0x40,0x00};
+static const uint8_t n_[5] = {0x7C,0x04,0x04,0x04,0x78};
+static const uint8_t o_[5] = {0x38,0x44,0x44,0x44,0x38};
+static const uint8_t p_[5] = {0x7C,0x14,0x14,0x14,0x08};
+static const uint8_t r_[5] = {0x7C,0x08,0x04,0x04,0x08};
+static const uint8_t s_[5] = {0x48,0x54,0x54,0x54,0x24};
+static const uint8_t t_[5] = {0x04,0x3F,0x44,0x40,0x20};
+static const uint8_t u_[5] = {0x3C,0x40,0x40,0x20,0x7C};
+static const uint8_t m_[5] = {0x7C,0x04,0x18,0x04,0x78};
+
+static const uint8_t space_[5] = {0x00,0x00,0x00,0x00,0x00};
+static const uint8_t punto_[5]={0,0,0x60,0x60,0};
+
+static void draw_border(void) {
+    for (uint8_t x = 0; x < LCD_WIDTH; x++) {
+        lcd_set_pixel(x, 0, 1);
+        lcd_set_pixel(x, LCD_HEIGHT - 1, 1);
+    }
+    for (uint8_t y = 0; y < LCD_HEIGHT; y++) {
+        lcd_set_pixel(0, y, 1);
+        lcd_set_pixel(LCD_WIDTH - 1, y, 1);
+    }
+}
+
+static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]) {
+    for (uint8_t col = 0; col < 5; col++) {
+        uint8_t bits = p[col];
+        for (uint8_t row = 0; row < 7; row++) {
+            if (bits & (1 << row)) {
+                lcd_set_pixel(x + col, y + row, 1);
+            }
+        }
+    }
+}
+
+static void lcd_draw_pattern_text(uint8_t x, uint8_t y, const uint8_t *msg[], uint8_t len){
+    for(uint8_t i = 0; i < len; i++){
+        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
+    }
+}
+
+static void lcd_draw_jugar_text(void){
+    const uint8_t *msg[] = {J_, U_, G_, A_, R_};
+    lcd_draw_pattern_text(26, 14, msg, 5);
+}
+
+static void lcd_draw_cargar_text(void){
+    const uint8_t *msg[] = {C_ ,A_ ,R_ ,G_, A_, R_};
+    lcd_draw_pattern_text(24, 27, msg, 6);
+}
+
+static void lcd_draw_text_one(void){
+    const uint8_t *msg[] = {C_,o_,n_,e_,c_,t_,a_,space_,l_,a_};
+    lcd_draw_pattern_text(6, 4, msg, 10);
+}
+
+static void lcd_draw_text_two(void){
+    const uint8_t *msg[] = {c_,o_,n_,s_,o_,l_,a_,space_,a_,space_,l_,a_};
+    lcd_draw_pattern_text(6, 12, msg, 12);
+}
+
+static void lcd_draw_text_tree(void){
+    const uint8_t *msg[] = {c_,o_,m_,p_,u_,t_,a_,d_,o_,r_,a_};
+    lcd_draw_pattern_text(6, 20, msg, 11);
+}
+
+static void lcd_draw_text_four(void){
+    const uint8_t *msg[] = {c_,o_,n_,space_,e_,l_,space_,c_,a_,b_,l_,e_};
+    lcd_draw_pattern_text(6, 28, msg, 12);
+}
+
+static void lcd_draw_text_five(void){
+    const uint8_t *msg[] = {e_,s_,p_,e_,c_,i_,a_,l_};
+    lcd_draw_pattern_text(6, 36, msg, 8);
+}
+
+static void lcd_draw_B_text(void){
+    const uint8_t *msg[] = {B_};
+    lcd_draw_pattern_text(75, 39, msg, 1);
+}
+
+static void lcd_draw_score_text(void){
+    const uint8_t *msg[] = {S_, C_, O_, R_, E_};
+    lcd_draw_pattern_text(29, 1, msg, 5);
+}
+
+static void lcd_draw_game_over_text(void) {
+    const uint8_t *msg[] = {G_, A_, M_, E_, space_, O_, V_, E_, R_};
+    lcd_draw_pattern_text(12, 18, msg, 9);
+}
+
+static void lcd_draw_pause_text(void) {
+    const uint8_t *msg[] = {P_, A_, U_, S_, E_};
+    lcd_draw_pattern_text(27, 18, msg, 5);
+}
+
 static const uint8_t font5x7[][5] = {
     {0x3E,0x51,0x49,0x45,0x3E}, // 0
     {0x00,0x42,0x7F,0x40,0x00}, // 1
@@ -235,73 +372,14 @@ static void lcd_draw_number(uint8_t x, uint8_t y, uint16_t n) {
     }
 }
 
-// Letras para "GAME OVER"
-static const uint8_t G_[5] = {0x3E,0x41,0x49,0x49,0x7A};
-static const uint8_t A_[5] = {0x7E,0x11,0x11,0x11,0x7E};
-static const uint8_t M_[5] = {0x7F,0x02,0x04,0x02,0x7F};
-static const uint8_t E_[5] = {0x7F,0x49,0x49,0x49,0x41};
-static const uint8_t O_[5] = {0x3E,0x41,0x41,0x41,0x3E};
-static const uint8_t V_[5] = {0x1F,0x20,0x40,0x20,0x1F};
-static const uint8_t R_[5] = {0x7F,0x09,0x19,0x29,0x46};
-static const uint8_t J_[5] = {0x20,0x40,0x41,0x3F,0x01};
-static const uint8_t U_[5] = {0x3F,0x40,0x40,0x40,0x3F};
-static const uint8_t C_[5] = {0x3E,0x41,0x41,0x41,0x22};
-static const uint8_t B_[5] = {0x7F,0x49,0x49,0x49,0x36};
-static const uint8_t S_[5] = {0x26,0x49,0x49,0x49,0x32};
-
-static const uint8_t a_[5] = {0x20,0x54,0x54,0x54,0x78};
-static const uint8_t b_[5] = {0x7F,0x44,0x44,0x44,0x38};
-static const uint8_t c_[5] = {0x38,0x44,0x44,0x44,0x28};
-static const uint8_t d_[5] = {0x38,0x44,0x44,0x44,0x7F};
-static const uint8_t e_[5] = {0x38,0x54,0x54,0x54,0x18};
-static const uint8_t i_[5] = {0x00,0x44,0x7D,0x40,0x00};
-static const uint8_t l_[5] = {0x00,0x41,0x7F,0x40,0x00};
-static const uint8_t n_[5] = {0x7C,0x04,0x04,0x04,0x78};
-static const uint8_t o_[5] = {0x38,0x44,0x44,0x44,0x38};
-static const uint8_t p_[5] = {0x7C,0x14,0x14,0x14,0x08};
-static const uint8_t r_[5] = {0x7C,0x08,0x04,0x04,0x08};
-static const uint8_t s_[5] = {0x48,0x54,0x54,0x54,0x24};
-static const uint8_t t_[5] = {0x04,0x3F,0x44,0x40,0x20};
-static const uint8_t u_[5] = {0x3C,0x40,0x40,0x20,0x7C};
-static const uint8_t m_[5] = {0x7C,0x04,0x18,0x04,0x78};
-
-static const uint8_t space_[5] = {0x00,0x00,0x00,0x00,0x00};
-static const uint8_t punto_[5]={0,0,0x60,0x60,0};
-
-// Letras para "PAUSE"
-static const uint8_t P_[5] = {0x7F,0x09,0x09,0x09,0x06};
-static const uint8_t U_[5] = {0x3F,0x40,0x40,0x40,0x3F};
-static const uint8_t S_[5] = {0x26,0x49,0x49,0x49,0x32};
-
-static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]) {
-    for (uint8_t col = 0; col < 5; col++) {
-        uint8_t bits = p[col];
-        for (uint8_t row = 0; row < 7; row++) {
-            if (bits & (1 << row)) {
-                lcd_set_pixel(x + col, y + row, 1);
-            }
-        }
-    }
+static void lcd_draw_rank(uint8_t x, uint8_t y, uint8_t rank){
+    lcd_draw_number(x, y, rank);
+    lcd_draw_pattern_char(x + 6, y, punto_);
 }
 
-static void lcd_draw_game_over_text(void) {
-    const uint8_t *msg[] = {G_, A_, M_, E_, space_, O_, V_, E_, R_};
-    uint8_t x = 12;
-    uint8_t y = 18;
-
-    for (uint8_t i = 0; i < 9; i++) {
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-
-static void lcd_draw_pause_text(void) {
-    const uint8_t *msg[] = {P_, A_, U_, S_, E_};
-    uint8_t x = 27;
-    uint8_t y = 18;
-
-    for (uint8_t i = 0; i < 5; i++) {
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
+static void lcd_draw_score_row(uint8_t y, uint8_t rank, uint16_t score){
+    lcd_draw_rank(3, y, rank);
+    lcd_draw_number(20, y, score);
 }
 
 // Botones
@@ -409,6 +487,73 @@ static void read_input(void) {
     } else if (button_down(BTN_RIGHT) && dir != DIR_LEFT) {
         next_dir = DIR_RIGHT;
     }
+}
+
+// MENU
+
+static const uint8_t CURSOR_R_[5] = {0x00, 0x3E, 0x1C, 0x08, 0x00};
+
+static void lcd_draw_cursor(uint8_t x, uint8_t y){
+    lcd_draw_pattern_char(x, y, CURSOR_R_);
+}
+
+static void menu_update(void){
+    if(button_pressed_event(BTN_UP)){
+        if(menu_selection > 0){
+            menu_selection--;
+        }
+    }
+
+    if(button_pressed_event(BTN_DOWN)){
+        if(menu_selection + 1u < (uint8_t)MENU_ITEM_COUNT){
+            menu_selection++;
+        }
+    }
+}
+
+static void menu_draw(void){
+    lcd_clear_buffer();
+
+    draw_border();
+    lcd_draw_jugar_text();
+    lcd_draw_cargar_text();
+
+    if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
+        lcd_draw_cursor(16, 14);
+    } else {
+        lcd_draw_cursor(16, 27);
+    }
+
+    lcd_update();
+}
+
+static void instruction_draw(void){
+    lcd_clear_buffer();
+
+    draw_border();
+    lcd_draw_B_text();
+
+    lcd_draw_text_one();
+    lcd_draw_text_two();
+    lcd_draw_text_tree();
+    lcd_draw_text_four();
+    lcd_draw_text_five();
+
+    lcd_update();
+}
+
+static void score_draw(void){
+    lcd_clear_buffer();
+
+    draw_border();
+
+    lcd_draw_score_text();
+    lcd_draw_score_row(12, 1, score1);
+    lcd_draw_score_row(20, 2, score2);
+    lcd_draw_score_row(28, 3, score3);
+    lcd_draw_score_row(36, 4, score4);
+
+    lcd_update();
 }
 
 // Juego
@@ -546,17 +691,6 @@ static void game_update(void) {
     }
 }
 
-static void draw_border(void) {
-    for (uint8_t x = 0; x < LCD_WIDTH; x++) {
-        lcd_set_pixel(x, 0, 1);
-        lcd_set_pixel(x, LCD_HEIGHT - 1, 1);
-    }
-    for (uint8_t y = 0; y < LCD_HEIGHT; y++) {
-        lcd_set_pixel(0, y, 1);
-        lcd_set_pixel(LCD_WIDTH - 1, y, 1);
-    }
-}
-
 static void game_draw(void) {
     lcd_clear_buffer();
 
@@ -595,44 +729,85 @@ int main(void) {
     buttons_init();
     rng_init();
     buttons_reset();
-    game_init();
+    buttons_poll();
+
     uint8_t prev_game_over = 0;
     uint8_t restart_armed = 0;
 
     while (1) {
-        // Al entrar a GAME OVER, limpiar eventos y requerir soltar botones antes de reiniciar
-        if (game_over && !prev_game_over) {
-            buttons_reset();
-            restart_armed = 0;
-        }
-        prev_game_over = game_over;
 
-        // Polling rápido para mejor respuesta + antirrebote
-        for (uint8_t i = 0; i < (GAME_TICK_MS / INPUT_POLL_MS); i++) {
-            buttons_poll();
+        if(app_state == APP_MENU){
+            menu_update();
 
-            if (game_over) {
-                if (!restart_armed) {
-                    if (btn_state == 0) restart_armed = 1; // esperar a que suelten todo
-                } else if (any_button_pressed_event()) {
-                    game_init();
+            if(button_pressed_event(BTN_A)){
+                if(menu_selection == (uint8_t)MENU_ITEM_LOAD){
+                    app_state = APP_INSTRUCCION;
                     buttons_reset();
-                    prev_game_over = 0;
-                    restart_armed = 0;
+
+                } else if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
+                    app_state = APP_SCORE;
+                    buttons_reset();
                 }
-            } else {
-                read_input();
             }
 
+            menu_draw();
             _delay_ms(INPUT_POLL_MS);
-        }
 
-        if (!game_over) {
-            game_update();
-        }
+        } else if(app_state == APP_INSTRUCCION){
+            if(button_pressed_event(BTN_B)){
+                app_state = APP_MENU;
+                buttons_reset();
+            }
 
-        game_draw();
+            instruction_draw();
+
+        } else if(app_state == APP_SCORE){
+            if(button_pressed_event(BTN_A)){
+                game_init();
+                app_state = APP_GAME;
+                buttons_reset();
+            }
+
+            score_draw();
+            _delay_ms(INPUT_POLL_MS);
+        
+        } else if(app_state == APP_GAME){
+
+            // Al entrar a GAME OVER, limpiar eventos y requerir soltar botones antes de reiniciar
+            if (game_over && !prev_game_over) {
+                buttons_reset();
+                restart_armed = 0;
+            }
+            prev_game_over = game_over;
+
+            // Polling rápido para mejor respuesta + antirrebote
+            for (uint8_t i = 0; i < (GAME_TICK_MS / INPUT_POLL_MS); i++) {
+                buttons_poll();
+
+                if (game_over) {
+                    if (!restart_armed) {
+                        if (btn_state == 0) restart_armed = 1; // esperar a que suelten todo
+                    } else if (any_button_pressed_event()) {
+                        game_init();
+                        buttons_reset();
+                        prev_game_over = 0;
+                        restart_armed = 0;
+                    }
+                } else {
+                    read_input();
+                }
+
+                _delay_ms(INPUT_POLL_MS);
+            }
+
+            if (!game_over) {
+                game_update();
+            }
+
+            game_draw();
+
+        }
+        
     }
-
     return 0;
 }
