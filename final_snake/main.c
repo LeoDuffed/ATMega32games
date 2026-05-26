@@ -45,6 +45,21 @@ static uint8_t lcd_buffer[504];
 #define GRID_H (LCD_HEIGHT / CELL_SIZE)  // 12
 #define MAX_SNAKE   64
 
+#define EEPROM_ADDR 0x50
+
+#define EE_MAGIC_0 0x0000
+#define EE_MAGIC_1 0x0001
+#define EE_VERSION 0x0002
+
+#define MAGIC_0 'R'
+#define MAGIC_1 'P'
+#define EEPROM_VERSION 1
+
+#define EE_SCORE_BASE 0x0100
+#define TOP_COUNT 4
+
+static uint8_t highscore_saved;
+
 typedef struct {
     uint8_t x;
     uint8_t y;
@@ -82,11 +97,6 @@ static uint8_t btn_state;
 static uint8_t btn_press_events;
 static uint8_t btn_release_events;
 static uint8_t btn_debounce_cnt[BTN_COUNT];
-
-static uint16_t score1 = 129;
-static uint16_t score2 = 70; 
-static uint16_t score3 = 32;
-static uint16_t score4 = 17;
 
 typedef enum {
     MENU_ITEM_PLAY,
@@ -248,6 +258,8 @@ static const uint8_t I_[5] PROGMEM = {0x41,0x41,0x7F,0x41,0x41};
 static const uint8_t N_[5] PROGMEM = {0x7F,0x02,0x04,0x08,0x7F};
 static const uint8_t D_[5] PROGMEM = {0x7F,0x41,0x41,0x22,0x1C};
 static const uint8_t L_[5] PROGMEM = {0x7F,0x40,0x40,0x40,0x40};
+static const uint8_t T_[5] PROGMEM = {0x01,0x01,0x7F,0x01,0x01};
+
 
 static const uint8_t a_[5] PROGMEM = {0x20,0x54,0x54,0x54,0x78};
 static const uint8_t b_[5] PROGMEM = {0x7F,0x44,0x44,0x44,0x38};
@@ -575,17 +587,137 @@ static void instruction_draw(void){
     lcd_update();
 }
 
+// codigo memoria externa
+static void twi_init(void){
+    TWSR = 0x00;
+    TWBR = 72;
+    TWCR = (1 << TWEN);
+}
+
+static void twi_start(void){
+    TWCR = (1 << TWINT) | (1 << TWSTA) | (1 << TWEN);
+    while(!(TWCR & ( 1 << TWINT)));
+}
+
+static void twi_stop(void){
+    TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN);
+    _delay_us(10);
+}
+
+static void twi_write(uint8_t data){
+    TWDR = data;
+    TWCR = (1 << TWINT) | (1 << TWEN);
+    while(!(TWCR & (1 << TWINT)));
+}
+
+static uint8_t twi_read_nack(void){
+    TWCR = (1 << TWINT) | (1 << TWEN);
+    while(!(TWCR & (1 << TWINT)));
+    return TWDR;
+}
+
+static void eeprom_write_byte(uint16_t mem_addr, uint8_t data){
+    twi_start();
+    twi_write((EEPROM_ADDR << 1) | 0);
+    twi_write((uint8_t)(mem_addr >> 8));
+    twi_write((uint8_t)mem_addr);
+    twi_write(data);
+    twi_stop();
+    _delay_ms(10);
+}
+
+static uint8_t eeprom_read_byte(uint16_t mem_addr){
+    uint8_t data;
+
+    twi_start();
+    twi_write((EEPROM_ADDR << 1) | 0);
+    twi_write((uint8_t)(mem_addr >> 8));
+    twi_write((uint8_t)mem_addr);
+
+    twi_start();
+    twi_write((EEPROM_ADDR << 1) | 1);
+
+    data = twi_read_nack();
+    twi_stop();
+
+    return data;
+}
+
+static void eeprom_write_u16(uint16_t addr, uint16_t value){
+    eeprom_write_byte(addr, (uint8_t)(value & 0xFF));
+    eeprom_write_byte(addr + 1, (uint8_t)(value >> 8));
+}
+
+static uint16_t eeprom_read_u16(uint16_t addr){
+    uint8_t low = eeprom_read_byte(addr);
+    uint8_t high = eeprom_read_byte(addr + 1);
+    return ((uint16_t)high << 8) | low;
+}
+
+static void scores_read(uint16_t scores[TOP_COUNT]){
+    for(uint8_t i = 0; i < TOP_COUNT; i++){
+        scores[i] = eeprom_read_u16(EE_SCORE_BASE + (i*2));
+    }
+}
+
+static void scores_write(uint16_t scores[TOP_COUNT]){
+    for(uint8_t i = 0; i < TOP_COUNT; i++){
+        eeprom_write_u16(EE_SCORE_BASE + (i * 2),scores[i]);
+    }
+}
+
+static void scores_try_insert(uint16_t new_score){
+    uint16_t scores[TOP_COUNT];
+
+    scores_read(scores);
+
+    for(uint8_t i = 0; i < TOP_COUNT; i++){
+        if(new_score > scores[i]){
+            for(uint8_t j = TOP_COUNT - 1; j > i; j--){
+                scores[j] = scores[j - 1];
+            }
+
+            scores[i] = new_score;
+            scores_write(scores);
+            return;
+        }
+    }
+}
+
+static void eeprom_init_if_needed(void){
+    uint8_t m0 = eeprom_read_byte(EE_MAGIC_0);
+    uint8_t m1 = eeprom_read_byte(EE_MAGIC_1);
+
+    if(m0 != MAGIC_0 || m1 != MAGIC_1){
+        eeprom_write_byte(EE_MAGIC_0, MAGIC_0);
+        eeprom_write_byte(EE_MAGIC_1, MAGIC_1);
+        eeprom_write_byte(EE_VERSION, EEPROM_VERSION);
+
+        uint16_t zeros[TOP_COUNT] = {0,0,0,0};
+        scores_write(zeros);
+    }
+}
+
+static void scores_clear(void){
+    uint16_t zeros[TOP_COUNT] = {0, 0, 0, 0};
+    scores_write(zeros);
+}
+
 // pantalla de scores
 static void score_draw(void){
-    lcd_clear_buffer();
 
+    uint16_t scores[TOP_COUNT];
+
+    scores_read(scores);
+
+    lcd_clear_buffer();
     draw_border();
 
     lcd_draw_score_text();
-    lcd_draw_score_row(12, 1, score1);
-    lcd_draw_score_row(20, 2, score2);
-    lcd_draw_score_row(28, 3, score3);
-    lcd_draw_score_row(36, 4, score4);
+    lcd_draw_score_row(12, 1, scores[0]);
+    lcd_draw_score_row(20, 2, scores[1]);
+    lcd_draw_score_row(28, 3, scores[2]);
+    lcd_draw_score_row(36, 4, scores[3]);
 
     lcd_update();
 }
@@ -811,11 +943,14 @@ int main(void) {
     lcd_init();
     buttons_init();
     rng_init();
+    twi_init();
+    eeprom_init_if_needed();
     buttons_reset();
     ldr_led_init();
 
     uint8_t prev_game_over = 0;
     uint8_t restart_armed = 0;
+    highscore_saved = 0;
 
     while (1) {
         ldr_led_update();
@@ -847,8 +982,9 @@ int main(void) {
             instruction_draw();
 
         } else if(app_state == APP_SCORE){
-            if(button_pressed_event(BTN_A)){
+            if(button_pressed_event(BTN_A) || button_pressed_event(BTN_B)){
                 game_init();
+                highscore_saved = 0;
                 app_state = APP_GAME;
                 buttons_reset();
             }
@@ -860,6 +996,10 @@ int main(void) {
 
             // Al entrar a GAME OVER, limpiar eventos y requerir soltar botones antes de reiniciar
             if (game_over && !prev_game_over) {
+                if(!highscore_saved){
+                    scores_try_insert(score);
+                    highscore_saved = 1;
+                }
                 buttons_reset();
                 restart_armed = 0;
             }
@@ -898,6 +1038,7 @@ int main(void) {
                     game_init();
                     prev_game_over = 0;
                     restart_armed = 0;
+                    highscore_saved = 0;
                     app_state = APP_GAME;
                     buttons_reset();
                 
