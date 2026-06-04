@@ -7,7 +7,7 @@
 #include <string.h>
 #include <stdint.h>
 
-#define LDR_PIN   PD6
+#define LDR_PIN   PA6
 #define LED_PIN   PB6
 
 #define LCD_PORT PORTB
@@ -259,7 +259,7 @@ static const uint8_t N_[5] PROGMEM = {0x7F,0x02,0x04,0x08,0x7F};
 static const uint8_t D_[5] PROGMEM = {0x7F,0x41,0x41,0x22,0x1C};
 static const uint8_t L_[5] PROGMEM = {0x7F,0x40,0x40,0x40,0x40};
 static const uint8_t T_[5] PROGMEM = {0x01,0x01,0x7F,0x01,0x01};
-
+static const uint8_t K_[5] PROGMEM = {0x7F,0x08,0x14,0x22,0x41};
 
 static const uint8_t a_[5] PROGMEM = {0x20,0x54,0x54,0x54,0x78};
 static const uint8_t b_[5] PROGMEM = {0x7F,0x44,0x44,0x44,0x38};
@@ -308,8 +308,8 @@ static void lcd_draw_pattern_text(uint8_t x, uint8_t y, const uint8_t *msg[], ui
     }
 }
 
-static void lcd_draw_jugar_text(void){
-    const uint8_t *msg[] = {J_, U_, G_, A_, R_};
+static void lcd_draw_snake_text(void){
+    const uint8_t *msg[] = {S_,N_,A_,K_,E_};
     lcd_draw_pattern_text(26, 14, msg, 5);
 }
 
@@ -559,7 +559,7 @@ static void menu_draw(void){
     lcd_clear_buffer();
 
     draw_border();
-    lcd_draw_jugar_text();
+    lcd_draw_snake_text();
     lcd_draw_cargar_text();
 
     if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
@@ -919,9 +919,9 @@ static void end_game_draw(void){
 
 static void ldr_led_init(void) {
     // PD6 como entrada
-    DDRD &= ~(1 << LDR_PIN);
+    DDRA &= ~(1 << LDR_PIN);
     // Pull-up interno desactivado
-    PORTD &= ~(1 << LDR_PIN);
+    PORTA &= ~(1 << LDR_PIN);
 
     // PB6 como salida
     DDRB |= (1 << LED_PIN);
@@ -931,7 +931,7 @@ static void ldr_led_init(void) {
 
 static void ldr_led_update(void) {
     // Si PD6 lee 1, asumimos poca luz
-    if (PIND & (1 << LDR_PIN)) {
+    if (PINA & (1 << LDR_PIN)) {
         PORTB |= (1 << LED_PIN);   // prende LED
     } else {
         PORTB &= ~(1 << LED_PIN);  // apaga LED
