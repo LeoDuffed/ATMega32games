@@ -345,14 +345,17 @@ static void lcd_draw_pattern_text(uint8_t x, uint8_t y, const uint8_t *msg[], ui
     }
 }
 
-static void lcd_draw_break_out_text(void){ // falta ver si si queda bien
-    const uint8_t *msg[] = {B_,R_,A_,K_,E_,space_,O_,U_,T_};
-    lcd_draw_pattern_text(26, 14, msg, 8);
+static void lcd_draw_break_out_text(void){ 
+    const uint8_t *break_msg[] = {B_,R_,A_,K_,E_};
+    const uint8_t *out_msg[] = {O_,U_,T_};
+
+    lcd_draw_pattern_text(26, 9, break_msg, 5);
+    lcd_draw_pattern_text(32, 17, out_msg, 3);
 }
 
 static void lcd_draw_cargar_text(void){
     const uint8_t *msg[] = {C_ ,A_ ,R_ ,G_, A_, R_};
-    lcd_draw_pattern_text(24, 27, msg, 6);
+    lcd_draw_pattern_text(24, 31, msg, 6);
 }
 
 static void lcd_draw_text_one(void){
@@ -579,9 +582,9 @@ static void menu_draw(void){
     lcd_draw_cargar_text();
 
     if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
-        lcd_draw_cursor(16, 14);
+        lcd_draw_cursor(16, 13);
     } else {
-        lcd_draw_cursor(16, 27);
+        lcd_draw_cursor(16, 31);
     }
 
     lcd_update();
