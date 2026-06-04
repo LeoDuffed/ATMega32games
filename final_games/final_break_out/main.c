@@ -33,15 +33,14 @@
 #define BTN_PIN PINA
 #define BTN_DDR DDRA
 
-#define BTN_UP PA0
-#define BTN_DOWN PA1
-#define BTN_LEFT PA2
-#define BTN_RIGHT PA3
-#define BTN_STOP PA4
-#define BTN_A PA5
-#define BTN_B PA6
+#define BTN_UP     PA0
+#define BTN_DOWN   PA1
+#define BTN_LEFT   PA2
+#define BTN_RIGHT  PA3
+#define BTN_A      PA4
+#define BTN_B      PA5
 
-#define BTN_MASK ((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_LEFT) | (1 << BTN_RIGHT) | (1 << BTN_STOP))
+#define BTN_MASK ((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_LEFT) | (1 << BTN_RIGHT) | (1 << BTN_A) | (1 << BTN_B))
 
 #define INPUT_POLL_MS 10
 #define GAME_TICK_MS 100
@@ -97,9 +96,13 @@ static uint16_t score = 0;
 #define SCORE_Y (LCD_HEIGHT - 8)
 
 typedef enum {
+    BTN_IDX_UP,
+    BTN_IDX_DOWN,
     BTN_IDX_LEFT,
     BTN_IDX_RIGHT,
     BTN_IDX_STOP,
+    BTN_IDX_A,
+    BTN_IDX_B,
     BTN_COUNT
 } ButtonIndex;
 
@@ -342,7 +345,7 @@ static void lcd_draw_pattern_text(uint8_t x, uint8_t y, const uint8_t *msg[], ui
     }
 }
 
-lcd_draw_break_out_text(void){ // falta ver si si queda bien
+static void lcd_draw_break_out_text(void){ // falta ver si si queda bien
     const uint8_t *msg[] = {B_,R_,A_,K_,E_,space_,O_,U_,T_};
     lcd_draw_pattern_text(26, 14, msg, 8);
 }
@@ -413,7 +416,7 @@ static void lcd_draw_salir_text(void){
 }
 
 // Numeros que se muestran
-static const uint8_t font5x7[][5] = {
+static const uint8_t font5x7[][5] PROGMEM = {
     {0x3E,0x51,0x49,0x45,0x3E}, // 0
     {0x00,0x42,0x7F,0x40,0x00}, // 1
     {0x42,0x61,0x51,0x49,0x46}, // 2
@@ -572,7 +575,7 @@ static void menu_draw(void){
     lcd_clear_buffer();
 
     draw_border();
-    lcd_draw_snake_text();
+    lcd_draw_break_out_text();
     lcd_draw_cargar_text();
 
     if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
@@ -669,7 +672,12 @@ static uint16_t eeprom_read_u16(uint16_t addr){
 
 static void scores_read(uint16_t scores[TOP_COUNT]){
     for(uint8_t i = 0; i < TOP_COUNT; i++){
-        scores[i] = eeprom_read_u16(EE_SCORE_BASE + (i*2));
+        scores[i] = eeprom_read_u16(EE_SCORE_BASE + (i * 2));
+
+        // Si la EEPROM está vacía o corrupta, tratarlo como 0
+        if(scores[i] == 0xFFFF){
+            scores[i] = 0;
+        }
     }
 }
 
@@ -816,7 +824,7 @@ static void read_input(void){
     static uint8_t paddle_move_cooldown = 0;
 
     // Pausa: toggle con evento (antirrebote)
-    if(button_pressed_event(BTN_STOP)){
+    if(button_pressed_event(BTN_B)){
         game_pause ^= 1;
     }
 
@@ -999,7 +1007,7 @@ int main(void) {
             _delay_ms(INPUT_POLL_MS);
         
         } else if(app_state == APP_GAME){
-            if(game_over && !prev_game_over){
+            if((game_over || win) && !prev_game_over){
                 if(!highscore_saved){
                     scores_try_insert(score);
                     highscore_saved = 1;
@@ -1007,45 +1015,50 @@ int main(void) {
                 buttons_reset();
                 restart_armed = 0;
             }
-            prev_game_over = game_over;
-        }
+            prev_game_over = (game_over || win);
 
-        
-        return 0;
-    }
-}
-    
-    /*
-    uint8_t prev_end = 0;
-    uint8_t restart_armed = 0;
+            for(uint8_t i = 0; i < (GAME_TICK_MS / INPUT_POLL_MS); i++){
+                ldr_led_update();
+                buttons_poll();
 
-        uint8_t end = (game_over || win) ? 1 : 0;
-        if(end && !prev_end){
-            buttons_reset();
-            restart_armed = 0;
-        }
-        prev_end = end;
-
-        for(uint8_t i = 0; i < (GAME_TICK_MS / INPUT_POLL_MS); i++){
-            buttons_poll();
-
-            if(game_over || win){
-                if(!restart_armed){
-                    if(btn_state == 0) restart_armed = 1;
-                } else if(any_button_pressed_event()){
-                    game_init();
-                    buttons_reset();
-                    prev_end = 0;
-                    restart_armed = 0;
+                if(game_over || win){
+                    if(!restart_armed){
+                        if(btn_state == 0) restart_armed = 1;
+                    } else if(any_button_pressed_event()){
+                        app_state = APP_END;
+                        buttons_reset();
+                    }
+                } else {
+                    read_input();
                 }
-            } else {
-                read_input();
+
+                _delay_ms(INPUT_POLL_MS);
             }
 
-            _delay_ms(INPUT_POLL_MS);
-        }
+            game_update();
+            game_draw();
 
-        game_update();
-        game_draw();
+        } else if(app_state == APP_END){
+            end_game_update();
+
+            if(button_pressed_event(BTN_A)){
+                if(end_selection == (uint8_t)END_ITEM_PLAY){
+                    game_init();
+                    prev_game_over = 0;
+                    restart_armed = 0;
+                    highscore_saved = 0;
+                    app_state = APP_GAME;
+                    buttons_reset();
+                } else if(end_selection == (uint8_t)END_ITEM_SCAPE){
+                    app_state = APP_MENU;
+                    buttons_reset();
+                }
+            }
+
+            end_game_draw();
+        }
+        
     }
-        */
+
+    return 0;
+}
