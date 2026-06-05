@@ -243,6 +243,25 @@ static void draw_cell(uint8_t gx, uint8_t gy){
     }
 }
 
+static void draw_player(uint8_t gx, uint8_t gy){
+    static const uint8_t ship[CELL_SIZE] = {
+        0x06,
+        0x0F,
+        0x06,
+        0x09,
+    };
+    uint8_t px = gx * CELL_SIZE;
+    uint8_t py = gy * CELL_SIZE;
+
+    for(uint8_t y = 0; y < CELL_SIZE; y++){
+        for(uint8_t x = 0; x < CELL_SIZE; x++){
+            if(ship[y] & (1 << x)){
+                lcd_set_pixel(px + x, py + y, 1);
+            }
+        }
+    }
+}
+
 // Textos que se muestran
 static const uint8_t G_[5] PROGMEM = {0x3E,0x41,0x49,0x49,0x7A};
 static const uint8_t A_[5] PROGMEM = {0x7E,0x11,0x11,0x11,0x7E};
@@ -745,7 +764,7 @@ static void game_draw(void) {
     draw_border();
 
     lcd_draw_number(2,2,score);
-    draw_cell(player_x, PLAYER_Y);
+    draw_player(player_x, PLAYER_Y);
 
     for(uint8_t i = 0; i < NUM_OBS; i++){
         draw_cell(obs[i].x, obs[i].y);
