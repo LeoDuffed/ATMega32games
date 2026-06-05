@@ -698,11 +698,6 @@ static void eeprom_init_if_needed(void){
     }
 }
 
-static void scores_clear(void){
-    uint16_t zeros[TOP_COUNT] = {0, 0, 0, 0};
-    scores_write(zeros);
-}
-
 // pantalla de scores
 static void score_draw(void){
 

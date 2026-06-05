@@ -100,7 +100,6 @@ typedef enum {
     BTN_IDX_DOWN,
     BTN_IDX_LEFT,
     BTN_IDX_RIGHT,
-    BTN_IDX_STOP,
     BTN_IDX_A,
     BTN_IDX_B,
     BTN_COUNT
@@ -720,11 +719,6 @@ static void eeprom_init_if_needed(void){
         uint16_t zeros[TOP_COUNT] = {0,0,0,0};
         scores_write(zeros);
     }
-}
-
-static void scores_clear(void){
-    uint16_t zeros[TOP_COUNT] = {0, 0, 0, 0};
-    scores_write(zeros);
 }
 
 // pantalla de scores
