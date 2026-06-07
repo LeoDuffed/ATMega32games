@@ -1,10 +1,15 @@
 #define F_CPU 8000000UL
 
 #include <avr/io.h>
+#include <avr/pgmspace.h>
 #include <util/delay.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+
+// foto res
+#define LDR_PIN PA6
+#define LED_PIN PB6
 
 // pantalla LCD
 #define LCD_PORT PORTB
@@ -110,8 +115,8 @@ typedef enum {
     BTN_IDX_DOWN,
     BTN_IDX_LEFT,
     BTN_IDX_RIGHT,
-    BTN_IDX_STOP,
     BTN_IDX_A,
+    BTN_IDX_B,
     BTN_COUNT
 } ButtonIndex;
 
@@ -119,6 +124,31 @@ static uint8_t btn_state;
 static uint8_t btn_press_events;
 static uint8_t btn_release_events;
 static uint8_t btn_debounce_cnt[BTN_COUNT];
+
+
+typedef enum {
+    MENU_ITEM_PLAY,
+    MENU_ITEM_LOAD,
+    MENU_ITEM_COUNT
+} MenuItem;
+static uint8_t menu_selection = (uint8_t)MENU_ITEM_PLAY;
+
+typedef enum {
+    END_ITEM_PLAY,
+    END_ITEM_SCAPE,
+    END_ITEM_COUNT
+} EndItem;
+static uint8_t end_selection = (uint8_t)END_ITEM_PLAY;
+
+typedef enum {
+    APP_MENU,
+    APP_INSTRUCCION,
+    APP_SCORE,
+    APP_GAME,
+    APP_END,
+} AppState;
+
+static AppState app_state = APP_MENU;
 
 static void lcd_ce_low(void) { 
     LCD_PORT &= ~(1 << LCD_CE); 
@@ -237,6 +267,47 @@ static void lcd_set_pixel(uint8_t x, uint8_t y, uint8_t color) {
     }
 }
 
+// Textos que se muestran
+static const uint8_t G_[5] PROGMEM = {0x3E,0x41,0x49,0x49,0x7A};
+static const uint8_t A_[5] PROGMEM = {0x7E,0x11,0x11,0x11,0x7E};
+static const uint8_t M_[5] PROGMEM = {0x7F,0x02,0x04,0x02,0x7F};
+static const uint8_t E_[5] PROGMEM = {0x7F,0x49,0x49,0x49,0x41};
+static const uint8_t O_[5] PROGMEM = {0x3E,0x41,0x41,0x41,0x3E};
+static const uint8_t V_[5] PROGMEM = {0x1F,0x20,0x40,0x20,0x1F};
+static const uint8_t R_[5] PROGMEM = {0x7F,0x09,0x19,0x29,0x46};
+static const uint8_t J_[5] PROGMEM = {0x20,0x40,0x41,0x3F,0x01};
+static const uint8_t U_[5] PROGMEM = {0x3F,0x40,0x40,0x40,0x3F};
+static const uint8_t C_[5] PROGMEM = {0x3E,0x41,0x41,0x41,0x22};
+static const uint8_t B_[5] PROGMEM = {0x7F,0x49,0x49,0x49,0x36};
+static const uint8_t S_[5] PROGMEM = {0x26,0x49,0x49,0x49,0x32};
+static const uint8_t P_[5] PROGMEM = {0x7F,0x09,0x09,0x09,0x06};
+static const uint8_t I_[5] PROGMEM = {0x41,0x41,0x7F,0x41,0x41};
+static const uint8_t N_[5] PROGMEM = {0x7F,0x02,0x04,0x08,0x7F};
+static const uint8_t D_[5] PROGMEM = {0x7F,0x41,0x41,0x22,0x1C};
+static const uint8_t L_[5] PROGMEM = {0x7F,0x40,0x40,0x40,0x40};
+static const uint8_t T_[5] PROGMEM = {0x01,0x01,0x7F,0x01,0x01};
+static const uint8_t Y_[5] PROGMEM = {0x03,0x04,0x78,0x04,0x03};
+static const uint8_t W_[5] PROGMEM = {0x7F,0x20,0x18,0x20,0x7F};
+
+static const uint8_t a_[5] PROGMEM = {0x20,0x54,0x54,0x54,0x78};
+static const uint8_t b_[5] PROGMEM = {0x7F,0x44,0x44,0x44,0x38};
+static const uint8_t c_[5] PROGMEM = {0x38,0x44,0x44,0x44,0x28};
+static const uint8_t d_[5] PROGMEM = {0x38,0x44,0x44,0x44,0x7F};
+static const uint8_t e_[5] PROGMEM = {0x38,0x54,0x54,0x54,0x18};
+static const uint8_t i_[5] PROGMEM = {0x00,0x44,0x7D,0x40,0x00};
+static const uint8_t l_[5] PROGMEM = {0x00,0x41,0x7F,0x40,0x00};
+static const uint8_t n_[5] PROGMEM = {0x7C,0x04,0x04,0x04,0x78};
+static const uint8_t o_[5] PROGMEM = {0x38,0x44,0x44,0x44,0x38};
+static const uint8_t p_[5] PROGMEM = {0x7C,0x14,0x14,0x14,0x08};
+static const uint8_t r_[5] PROGMEM = {0x7C,0x08,0x04,0x04,0x08};
+static const uint8_t s_[5] PROGMEM = {0x48,0x54,0x54,0x54,0x24};
+static const uint8_t t_[5] PROGMEM = {0x04,0x3F,0x44,0x40,0x20};
+static const uint8_t u_[5] PROGMEM = {0x3C,0x40,0x40,0x20,0x7C};
+static const uint8_t m_[5] PROGMEM = {0x7C,0x04,0x18,0x04,0x78};
+
+static const uint8_t space_[5] PROGMEM = {0x00,0x00,0x00,0x00,0x00};
+static const uint8_t punto_[5] PROGMEM = {0,0,0x60,0x60,0};
+
 static void draw_border(void) {
     for (uint8_t x = 0; x < LCD_WIDTH; x++) {
         lcd_set_pixel(x, 0, 1);
@@ -246,6 +317,101 @@ static void draw_border(void) {
         lcd_set_pixel(0, y, 1);
         lcd_set_pixel(LCD_WIDTH - 1, y, 1);
     }
+}
+
+static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]){
+    for(uint8_t col = 0; col < 5; col++){
+        uint8_t bits = pgm_read_byte(&p[col]);
+        for(uint8_t row = 0; row < 7; row++){
+            if(bits & (1 << row)){
+                lcd_set_pixel(x + col, y + row, 1);
+            }
+        }
+    }
+}
+
+static void lcd_draw_pattern_text(uint8_t x, uint8_t y, const uint8_t *msg[], uint8_t len){
+    for(uint8_t i = 0; i < len; i++){
+        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
+    }
+}
+
+static void lcd_draw_space_invaders_text(void){
+    const uint8_t *space_msg[] = {S_,P_,A_,C_,E_};
+    const uint8_t *invaders_msg[] = {I_,N_,V_,A_,D_,E_,R_,S_};
+
+    lcd_draw_pattern_text(27, 9, space_msg, 5);
+    lcd_draw_pattern_text(17, 17, invaders_msg, 8);
+}
+
+static void lcd_draw_cargar_text(void){
+    const uint8_t *msg[] = {C_ ,A_ ,R_ ,G_, A_, R_};
+    lcd_draw_pattern_text(24, 31, msg, 6);
+}
+
+static void lcd_draw_text_one(void){
+    const uint8_t *msg[] = {C_,o_,n_,e_,c_,t_,a_,space_,l_,a_};
+    lcd_draw_pattern_text(6, 4, msg, 10);
+}
+
+static void lcd_draw_text_two(void){
+    const uint8_t *msg[] = {c_,o_,n_,s_,o_,l_,a_,space_,a_,space_,l_,a_};
+    lcd_draw_pattern_text(6, 12, msg, 12);
+}
+
+static void lcd_draw_text_tree(void){
+    const uint8_t *msg[] = {c_,o_,m_,p_,u_,t_,a_,d_,o_,r_,a_};
+    lcd_draw_pattern_text(6, 20, msg, 11);
+}
+
+static void lcd_draw_text_four(void){
+    const uint8_t *msg[] = {c_,o_,n_,space_,e_,l_,space_,c_,a_,b_,l_,e_};
+    lcd_draw_pattern_text(6, 28, msg, 12);
+}
+
+static void lcd_draw_text_five(void){
+    const uint8_t *msg[] = {e_,s_,p_,e_,c_,i_,a_,l_};
+    lcd_draw_pattern_text(6, 36, msg, 8);
+}
+
+static void lcd_draw_B_text(void){
+    const uint8_t *msg[] = {B_};
+    lcd_draw_pattern_text(75, 39, msg, 1);
+}
+
+static void lcd_draw_score_text(void){
+    const uint8_t *msg[] = {S_, C_, O_, R_, E_};
+    lcd_draw_pattern_text(29, 1, msg, 5);
+}
+
+static void lcd_draw_game_over_text(void) {
+    const uint8_t *msg[] = {G_, A_, M_, E_, space_, O_, V_, E_, R_};
+    lcd_draw_pattern_text(12, 18, msg, 9);
+}
+
+static void lcd_draw_pause_text(void) {
+    const uint8_t *msg[] = {P_, A_, U_, S_, E_};
+    lcd_draw_pattern_text(27, 18, msg, 5);
+}
+
+static void lcd_draw_seguir_text(void){
+    const uint8_t *msg[] = {S_,E_,G_,U_,I_,R_};
+    lcd_draw_pattern_text(26, 9, msg, 6);
+}
+
+static void lcd_draw_jugando_text(void){
+    const uint8_t *msg[] = {J_,U_,G_,A_,N_,D_,O_};
+    lcd_draw_pattern_text(22, 17, msg, 7);
+}
+
+static void lcd_draw_salir_text(void){
+    const uint8_t *msg[] = {S_,A_,L_,I_,R_};
+    lcd_draw_pattern_text(26, 31, msg, 5);
+}
+
+static void lcd_draw_win_text(void){
+    const uint8_t *msg[] = {Y_, O_, U_, space_, W_, I_, N_};
+    lcd_draw_pattern_text(22, 18, msg, 7);
 }
 
 static const uint8_t font5x7[][5] = {
@@ -261,12 +427,12 @@ static const uint8_t font5x7[][5] = {
     {0x06,0x49,0x49,0x29,0x1E}, // 9
 };
 
-static void draw_digit(uint8_t x, uint8_t y, char c){
+static void lcd_draw_char_digit(uint8_t x, uint8_t y, char c){
     if(c < '0' || c > '9') return;
     uint8_t idx = c - '0';
     
     for(uint8_t col = 0; col < 5; col++){
-        uint8_t bits = font5x7[idx][col];
+        uint8_t bits = pgm_read_byte(&font5x7[idx][col]);
         for(uint8_t row = 0; row < 7; row++){
             if(bits & (1 << row)){
                 lcd_set_pixel(x + col, y + row, 1);
@@ -275,8 +441,7 @@ static void draw_digit(uint8_t x, uint8_t y, char c){
     }
 }
 
-
-static void draw_score(uint8_t x, uint8_t y, uint16_t n){
+static void lcd_draw_number(uint8_t x, uint8_t y, uint16_t n){
     char buf[6];
     itoa(n, buf, 10);
 
@@ -284,66 +449,6 @@ static void draw_score(uint8_t x, uint8_t y, uint16_t n){
     while(buf[pos]){
         draw_digit(x + pos * 6, y, buf[pos]);
         pos++;
-    }
-}
-
-// Letras para "GAME OVER"
-static const uint8_t G_[5] = {0x3E,0x41,0x49,0x49,0x7A};
-static const uint8_t A_[5] = {0x7E,0x11,0x11,0x11,0x7E};
-static const uint8_t M_[5] = {0x7F,0x02,0x04,0x02,0x7F};
-static const uint8_t E_[5] = {0x7F,0x49,0x49,0x49,0x41};
-static const uint8_t O_[5] = {0x3E,0x41,0x41,0x41,0x3E};
-static const uint8_t V_[5] = {0x1F,0x20,0x40,0x20,0x1F};
-static const uint8_t R_[5] = {0x7F,0x09,0x19,0x29,0x46};
-static const uint8_t space_[5] = {0x00,0x00,0x00,0x00,0x00};
-
-// Letras para "PAUSE"
-static const uint8_t P_[5] = {0x7F,0x09,0x09,0x09,0x06};
-static const uint8_t U_[5] = {0x3F,0x40,0x40,0x40,0x3F};
-static const uint8_t S_[5] = {0x26,0x49,0x49,0x49,0x32};
-static const uint8_t Y_[5] = {0x03,0x04,0x78,0x04,0x03};
-static const uint8_t W_[5] = {0x7F,0x20,0x18,0x20,0x7F};
-static const uint8_t I_[5] = {0x41,0x41,0x7F,0x41,0x41};
-static const uint8_t N_[5] = {0x7F,0x02,0x04,0x08,0x7F};
-
-static void lcd_draw_pattern_char(uint8_t x, uint8_t y, const uint8_t p[5]){
-    for(uint8_t col = 0; col < 5; col++){
-        uint8_t bits = p[col];
-        for(uint8_t row = 0; row < 7; row++){
-            if(bits & (1 << row)){
-                lcd_set_pixel(x + col, y + row, 1);
-            }
-        }
-    }
-}
-
-static void lcd_draw_game_over_text(void){
-    const uint8_t *msg[] = {G_, A_, M_, E_, space_, O_, V_, E_, R_};
-    uint8_t x = 12;
-    uint8_t y = 18;
-
-    for(uint8_t i = 0; i < 9; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-
-static void lcd_draw_pause_text(void){
-    const uint8_t *msg[] = {P_, A_, U_, S_, E_};
-    uint8_t x = 27;
-    uint8_t y = 18;
-
-    for(uint8_t i = 0; i < 5; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
-    }
-}
-
-static void lcd_draw_win_text(void){
-    const uint8_t *msg[] = {Y_, O_, U_, space_, W_, I_, N_};
-    uint8_t x = (LCD_WIDTH - (7 * 6)) / 2;
-    uint8_t y = 18;
-
-    for(uint8_t i = 0; i < 7; i++){
-        lcd_draw_pattern_char(x + i * 6, y, msg[i]);
     }
 }
 
@@ -755,7 +860,7 @@ static void game_draw(void){
     lcd_clear_buffer();
     draw_border();
 
-    draw_score(SCORE_X, SCORE_Y, score);
+    lcd_draw_number(SCORE_X, SCORE_Y, score);
 
     for(uint8_t r = 0; r < ALIEN_ROWS; r++){
         for(uint8_t c = 0; c < ALIEN_COLS; c++){
