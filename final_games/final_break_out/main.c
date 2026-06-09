@@ -345,7 +345,7 @@ static void lcd_draw_pattern_text(uint8_t x, uint8_t y, const uint8_t *msg[], ui
 }
 
 static void lcd_draw_break_out_text(void){ 
-    const uint8_t *break_msg[] = {B_,R_,A_,K_,E_};
+    const uint8_t *break_msg[] = {B_,R_,E_,A_,K_};
     const uint8_t *out_msg[] = {O_,U_,T_};
 
     lcd_draw_pattern_text(26, 9, break_msg, 5);

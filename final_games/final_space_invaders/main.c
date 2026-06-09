@@ -30,10 +30,10 @@
 #define BTN_DOWN PA1
 #define BTN_LEFT PA2
 #define BTN_RIGHT PA3
-#define BTN_STOP PA4
-#define BTN_A PA5
+#define BTN_A PA4
+#define BTN_B PA5
 
-#define BTN_MASK ((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_LEFT) | (1 << BTN_RIGHT) | (1 << BTN_STOP) | (1 << BTN_A))
+#define BTN_MASK ((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_LEFT) | (1 << BTN_RIGHT) | (1 << BTN_A) | (1 << BTN_B))
 
 #define INPUT_POLL_MS 10
 #define GAME_TICK_MS 180
@@ -43,6 +43,21 @@
 #define LCD_WIDTH   84
 #define LCD_HEIGHT  48
 static uint8_t lcd_buffer[504];
+
+#define EEPROM_ADDR 0x50
+
+#define EE_MAGIC_0 0x0000
+#define EE_MAGIC_1 0x0001
+#define EE_VERSION 0x0002
+
+#define MAGIC_0 'R'
+#define MAGIC_1 'P'
+#define EEPROM_VERSION 1
+
+#define EE_SCORE_BASE 0x0130   // SPACE INVADERS
+#define TOP_COUNT 4
+
+static uint8_t highscore_saved;
 
 typedef struct {
     uint8_t x;
@@ -285,7 +300,6 @@ static const uint8_t I_[5] PROGMEM = {0x41,0x41,0x7F,0x41,0x41};
 static const uint8_t N_[5] PROGMEM = {0x7F,0x02,0x04,0x08,0x7F};
 static const uint8_t D_[5] PROGMEM = {0x7F,0x41,0x41,0x22,0x1C};
 static const uint8_t L_[5] PROGMEM = {0x7F,0x40,0x40,0x40,0x40};
-static const uint8_t T_[5] PROGMEM = {0x01,0x01,0x7F,0x01,0x01};
 static const uint8_t Y_[5] PROGMEM = {0x03,0x04,0x78,0x04,0x03};
 static const uint8_t W_[5] PROGMEM = {0x7F,0x20,0x18,0x20,0x7F};
 
@@ -414,7 +428,7 @@ static void lcd_draw_win_text(void){
     lcd_draw_pattern_text(22, 18, msg, 7);
 }
 
-static const uint8_t font5x7[][5] = {
+static const uint8_t font5x7[][5] PROGMEM = {
     {0x3E,0x51,0x49,0x45,0x3E}, // 0
     {0x00,0x42,0x7F,0x40,0x00}, // 1
     {0x42,0x61,0x51,0x49,0x46}, // 2
@@ -447,11 +461,22 @@ static void lcd_draw_number(uint8_t x, uint8_t y, uint16_t n){
 
     uint8_t pos = 0;
     while(buf[pos]){
-        draw_digit(x + pos * 6, y, buf[pos]);
+        lcd_draw_char_digit(x + pos * 6, y, buf[pos]);
         pos++;
     }
 }
 
+static void lcd_draw_rank(uint8_t x, uint8_t y, uint8_t rank){
+    lcd_draw_number(x, y, rank);
+    lcd_draw_pattern_char(x + 6, y, punto_);
+}
+
+static void lcd_draw_score_row(uint8_t y, uint8_t rank, uint16_t score){
+    lcd_draw_rank(3, y, rank);
+    lcd_draw_number(20, y, score);
+}
+
+// botones
 static void buttons_init(void){
     BTN_DDR &= ~BTN_MASK;
     BTN_PORT |= BTN_MASK;
@@ -476,8 +501,8 @@ static void buttons_poll(void){
         (1 << BTN_DOWN),
         (1 << BTN_LEFT),
         (1 << BTN_RIGHT),
-        (1 << BTN_STOP),
         (1 << BTN_A),
+        (1 << BTN_B),
     };
 
     uint8_t sample = buttons_raw_mask();
@@ -536,6 +561,243 @@ static uint16_t rng_entropy(void){
     return ((uint16_t)t << 8) | (uint16_t)(t ^ p);
 }
 
+static void spawn_player_shot(void);
+
+static void read_input(void){
+    static uint8_t move_cooldown = 0;
+
+    if(button_pressed_event(BTN_B)){
+        game_paused ^= 1;
+    }
+
+    if(game_paused || game_over || game_win){
+        return;
+    }
+
+    if(move_cooldown){
+        move_cooldown--;
+    }
+
+    uint8_t want_left = button_down(BTN_LEFT);
+    uint8_t want_right = button_down(BTN_RIGHT);
+
+    // Igual que en Breakout: si no se presiona nada, permitir movimiento inmediato al volver a presionar
+    if((!want_left && !want_right) || (want_left && want_right)){
+        move_cooldown = 0;
+    } else {
+        // Suavizar: limitar la tasa de movimiento
+        if(!move_cooldown){
+            if(want_left && !want_right){
+                if(player_x > PLAY_X_MIN){
+                    player_x--;
+                }
+            } else if(want_right && !want_left){
+                if(player_x < (uint8_t)(PLAY_X_MAX - SHIP_W + 1)){
+                    player_x++;
+                }
+            }
+            move_cooldown = SHIP_REPEAT_TICKS;
+        }
+    }
+
+    uint8_t fire = 0;
+    fire |= button_pressed_event(BTN_A);
+    fire |= button_pressed_event(BTN_UP);
+
+    if(fire && !player_shot_active){
+        spawn_player_shot();
+    }
+}
+
+// menu
+static const uint8_t CURSOR_R[5] PROGMEM = {0x00, 0x3E, 0x1C, 0x08, 0x00};
+
+static void lcd_draw_cursor(uint8_t x, uint8_t y){
+    lcd_draw_pattern_char(x,y, CURSOR_R);
+}
+
+
+static void menu_update(void){
+    if(button_pressed_event(BTN_UP)){
+        if(menu_selection > 0){
+            menu_selection--;
+        }
+    }
+
+    if(button_pressed_event(BTN_DOWN)){
+        if(menu_selection + 1u < (uint8_t)MENU_ITEM_COUNT){
+            menu_selection++;
+        }
+    }
+}
+
+static void menu_draw(void){
+    lcd_clear_buffer();
+
+    draw_border();
+    lcd_draw_space_invaders_text();
+    lcd_draw_cargar_text();
+
+    if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
+        lcd_draw_cursor(7, 13);
+    } else {
+        lcd_draw_cursor(7, 31);
+    }
+
+    lcd_update();
+}
+
+// pantalla de instrucciones
+static void instruction_draw(void){
+    lcd_clear_buffer();
+
+    draw_border();
+    lcd_draw_B_text();
+
+    lcd_draw_text_one();
+    lcd_draw_text_two();
+    lcd_draw_text_tree();
+    lcd_draw_text_four();
+    lcd_draw_text_five();
+
+    lcd_update();
+}
+
+// codigo memoria externa
+static void twi_init(void){
+    TWSR = 0x00;
+    TWBR = 72;
+    TWCR = (1 << TWEN);
+}
+
+static void twi_start(void){
+    TWCR = (1 << TWINT) | (1 << TWSTA) | (1 << TWEN);
+    while(!(TWCR & ( 1 << TWINT)));
+}
+
+static void twi_stop(void){
+    TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN);
+    _delay_us(10);
+}
+
+static void twi_write(uint8_t data){
+    TWDR = data;
+    TWCR = (1 << TWINT) | (1 << TWEN);
+    while(!(TWCR & (1 << TWINT)));
+}
+
+static uint8_t twi_read_nack(void){
+    TWCR = (1 << TWINT) | (1 << TWEN);
+    while(!(TWCR & (1 << TWINT)));
+    return TWDR;
+}
+
+static void eeprom_write_byte(uint16_t mem_addr, uint8_t data){
+    twi_start();
+    twi_write((EEPROM_ADDR << 1) | 0);
+    twi_write((uint8_t)(mem_addr >> 8));
+    twi_write((uint8_t)mem_addr);
+    twi_write(data);
+    twi_stop();
+    _delay_ms(10);
+}
+
+static uint8_t eeprom_read_byte(uint16_t mem_addr){
+    uint8_t data;
+
+    twi_start();
+    twi_write((EEPROM_ADDR << 1) | 0);
+    twi_write((uint8_t)(mem_addr >> 8));
+    twi_write((uint8_t)mem_addr);
+
+    twi_start();
+    twi_write((EEPROM_ADDR << 1) | 1);
+
+    data = twi_read_nack();
+    twi_stop();
+
+    return data;
+}
+
+static void eeprom_write_u16(uint16_t addr, uint16_t value){
+    eeprom_write_byte(addr, (uint8_t)(value & 0xFF));
+    eeprom_write_byte(addr + 1, (uint8_t)(value >> 8));
+}
+
+static uint16_t eeprom_read_u16(uint16_t addr){
+    uint8_t low = eeprom_read_byte(addr);
+    uint8_t high = eeprom_read_byte(addr + 1);
+    return ((uint16_t)high << 8) | low;
+}
+
+static void scores_read(uint16_t scores[TOP_COUNT]){
+    for(uint8_t i = 0; i < TOP_COUNT; i++){
+        scores[i] = eeprom_read_u16(EE_SCORE_BASE + (i * 2));
+
+        if(scores[i] == 0xFFFF){
+            scores[i] = 0;
+        }
+    }
+}
+
+static void scores_write(uint16_t scores[TOP_COUNT]){
+    for(uint8_t i = 0; i < TOP_COUNT; i++){
+        eeprom_write_u16(EE_SCORE_BASE + (i * 2),scores[i]);
+    }
+}
+
+static void scores_try_insert(uint16_t new_score){
+    uint16_t scores[TOP_COUNT];
+
+    scores_read(scores);
+
+    for(uint8_t i = 0; i < TOP_COUNT; i++){
+        if(new_score > scores[i]){
+            for(uint8_t j = TOP_COUNT - 1; j > i; j--){
+                scores[j] = scores[j - 1];
+            }
+
+            scores[i] = new_score;
+            scores_write(scores);
+            return;
+        }
+    }
+}
+
+static void eeprom_init_if_needed(void){
+    uint8_t m0 = eeprom_read_byte(EE_MAGIC_0);
+    uint8_t m1 = eeprom_read_byte(EE_MAGIC_1);
+
+    if(m0 != MAGIC_0 || m1 != MAGIC_1){
+        eeprom_write_byte(EE_MAGIC_0, MAGIC_0);
+        eeprom_write_byte(EE_MAGIC_1, MAGIC_1);
+        eeprom_write_byte(EE_VERSION, EEPROM_VERSION);
+
+        uint16_t zeros[TOP_COUNT] = {0,0,0,0};
+        scores_write(zeros);
+    }
+}
+
+// pantalla de scores
+static void score_draw(void){
+
+    uint16_t scores[TOP_COUNT];
+
+    scores_read(scores);
+
+    lcd_clear_buffer();
+    draw_border();
+
+    lcd_draw_score_text();
+    lcd_draw_score_row(12, 1, scores[0]);
+    lcd_draw_score_row(20, 2, scores[1]);
+    lcd_draw_score_row(28, 3, scores[2]);
+    lcd_draw_score_row(36, 4, scores[3]);
+
+    lcd_update();
+}
+
+// juego
 static void draw_rect(uint8_t x, uint8_t y, uint8_t w, uint8_t h){
     for(uint8_t i = 0; i < w; i++){
         for(uint8_t j = 0; j < h; j++){
@@ -698,52 +960,6 @@ static void game_init(void){
     alien_fire_cooldown = 10;
 }
 
-static void read_input(void){
-    static uint8_t move_cooldown = 0;
-
-    if(button_pressed_event(BTN_STOP)){
-        game_paused ^= 1;
-    }
-
-    if(game_paused || game_over || game_win){
-        return;
-    }
-
-    if(move_cooldown){
-        move_cooldown--;
-    }
-
-    uint8_t want_left = button_down(BTN_LEFT);
-    uint8_t want_right = button_down(BTN_RIGHT);
-
-    // Igual que en Breakout: si no se presiona nada, permitir movimiento inmediato al volver a presionar
-    if((!want_left && !want_right) || (want_left && want_right)){
-        move_cooldown = 0;
-    } else {
-        // Suavizar: limitar la tasa de movimiento
-        if(!move_cooldown){
-            if(want_left && !want_right){
-                if(player_x > PLAY_X_MIN){
-                    player_x--;
-                }
-            } else if(want_right && !want_left){
-                if(player_x < (uint8_t)(PLAY_X_MAX - SHIP_W + 1)){
-                    player_x++;
-                }
-            }
-            move_cooldown = SHIP_REPEAT_TICKS;
-        }
-    }
-
-    uint8_t fire = 0;
-    fire |= button_pressed_event(BTN_A);
-    fire |= button_pressed_event(BTN_UP);
-
-    if(fire && !player_shot_active){
-        spawn_player_shot();
-    }
-}
-
 static void game_update(void){
     if(game_over || game_win) return;
     if(game_paused) return;
@@ -893,45 +1109,166 @@ static void game_draw(void){
     lcd_update();
 }
 
+// pantalla end game
+static void end_game_update(void){
+    if(button_pressed_event(BTN_UP)){
+        if(end_selection > 0) end_selection--;
+    }
+
+    if(button_pressed_event(BTN_DOWN)){
+        if(end_selection + 1u < (uint8_t)END_ITEM_COUNT) end_selection++;
+    }
+}
+
+static void end_game_draw(void){
+    lcd_clear_buffer();
+
+    draw_border();
+    lcd_draw_seguir_text();
+    lcd_draw_jugando_text();
+    lcd_draw_salir_text();
+
+    if(end_selection == (uint8_t)END_ITEM_PLAY){
+        lcd_draw_cursor(16, 13);
+    } else {
+        lcd_draw_cursor(16, 31);
+    }
+
+    lcd_update();
+}
+
+static void ldr_led_init(void) {
+    // PD6 como entrada
+    DDRA &= ~(1 << LDR_PIN);
+    // Pull-up interno desactivado
+    PORTA &= ~(1 << LDR_PIN);
+
+    // PB6 como salida
+    DDRB |= (1 << LED_PIN);
+    // LED apagado al inicio
+    PORTB &= ~(1 << LED_PIN);
+}
+
+static void ldr_led_update(void) {
+    // Si PD6 lee 1, asumimos poca luz
+    if (PINA & (1 << LDR_PIN)) {
+        PORTB |= (1 << LED_PIN);   // prende LED
+    } else {
+        PORTB &= ~(1 << LED_PIN);  // apaga LED
+    }
+}
+
 int main(void){
     lcd_init();
     buttons_init();
     rng_init();
+    twi_init();
+    eeprom_init_if_needed();
     buttons_reset();
-    game_init();
+    ldr_led_init();
 
-    uint8_t prev_end = 0;
-    uint8_t restart_armed = 0;
+    uint8_t prev_game_over = 0;
+    uint8_t restart = 0;
+    highscore_saved = 0;
 
     while(1){
-        uint8_t end = (game_over || game_win) ? 1 : 0;
-        if(end && !prev_end){
-            buttons_reset();
-            restart_armed = 0;
-        }
-        prev_end = end;
+        ldr_led_update();
+        buttons_poll();
 
-        for(uint8_t i = 0; i < (GAME_TICK_MS / INPUT_POLL_MS); i++){
-            buttons_poll();
+        if(app_state == APP_MENU){
+            menu_update();
 
-            if(end){
-                if(!restart_armed){
-                    if(btn_state == 0) restart_armed = 1;
-                } else if(any_button_pressed_event()){
-                    game_init();
+            if(button_pressed_event(BTN_A)){
+                if(menu_selection == (uint8_t)MENU_ITEM_LOAD){
+                    app_state = APP_INSTRUCCION;
                     buttons_reset();
-                    prev_end = 0;
-                    restart_armed = 0;
+                } else if(menu_selection == (uint8_t)MENU_ITEM_PLAY){
+                    app_state = APP_SCORE;
+                    buttons_reset();
                 }
-            } else {
-                read_input();
             }
 
+            menu_draw();
             _delay_ms(INPUT_POLL_MS);
-        }
 
-        game_update();
-        game_draw();
+        } else if(app_state == APP_INSTRUCCION){
+            if(button_pressed_event(BTN_B)){
+                app_state = APP_MENU;
+                buttons_reset();
+            }
+
+            instruction_draw();
+            _delay_ms(INPUT_POLL_MS);
+
+        } else if(app_state == APP_SCORE){
+            if(button_pressed_event(BTN_A) || button_pressed_event(BTN_B)){
+                game_init();
+                highscore_saved = 0;
+                prev_game_over = 0;
+                restart = 0;
+                app_state = APP_GAME;
+                buttons_reset();
+            }
+
+            score_draw();
+            _delay_ms(INPUT_POLL_MS);
+
+        } else if(app_state == APP_GAME){
+            uint8_t game_finished = (game_over || game_win) ? 1 : 0;
+
+            if(game_finished && !prev_game_over){
+                if(!highscore_saved){
+                    scores_try_insert(score);
+                    highscore_saved = 1;
+                }
+                buttons_reset();
+                restart = 0;
+            }
+            prev_game_over = game_finished;
+
+            for(uint8_t i = 0; i < (GAME_TICK_MS / INPUT_POLL_MS); i++){
+                ldr_led_update();
+                buttons_poll();
+
+                if(game_finished){
+                    if(!restart){
+                        if(btn_state == 0) restart = 1;
+                    } else if(any_button_pressed_event()){
+                        app_state = APP_END;
+                        buttons_reset();
+                    }
+                } else {
+                    read_input();
+                }
+
+                _delay_ms(INPUT_POLL_MS);
+            }
+
+            if(!game_finished){
+                game_update();
+            }
+
+            game_draw();
+
+        } else if(app_state == APP_END){
+            end_game_update();
+
+            if(button_pressed_event(BTN_A)){
+                if(end_selection == (uint8_t)END_ITEM_PLAY){
+                    game_init();
+                    prev_game_over = 0;
+                    restart = 0;
+                    highscore_saved = 0;
+                    app_state = APP_GAME;
+                    buttons_reset();
+                } else if(end_selection == (uint8_t)END_ITEM_SCAPE){
+                    app_state = APP_MENU;
+                    buttons_reset();
+                }
+            }
+
+            end_game_draw();
+        }
     }
 
     return 0;
