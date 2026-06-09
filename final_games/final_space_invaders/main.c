@@ -772,9 +772,13 @@ static void eeprom_init_if_needed(void){
         eeprom_write_byte(EE_MAGIC_0, MAGIC_0);
         eeprom_write_byte(EE_MAGIC_1, MAGIC_1);
         eeprom_write_byte(EE_VERSION, EEPROM_VERSION);
+    }
+}
 
-        uint16_t zeros[TOP_COUNT] = {0,0,0,0};
-        scores_write(zeros);
+static void save_score_once(void){
+    if(!highscore_saved){
+        scores_try_insert(score);
+        highscore_saved = 1;
     }
 }
 
@@ -1217,10 +1221,7 @@ int main(void){
             uint8_t game_finished = (game_over || game_win) ? 1 : 0;
 
             if(game_finished && !prev_game_over){
-                if(!highscore_saved){
-                    scores_try_insert(score);
-                    highscore_saved = 1;
-                }
+                save_score_once();
                 buttons_reset();
                 restart = 0;
             }
@@ -1246,6 +1247,13 @@ int main(void){
 
             if(!game_finished){
                 game_update();
+                if(game_over || game_win){
+                    save_score_once();
+                    buttons_reset();
+                    restart = 0;
+                    prev_game_over = 1;
+                    game_finished = 1;
+                }
             }
 
             game_draw();
