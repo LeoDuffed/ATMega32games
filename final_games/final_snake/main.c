@@ -7,28 +7,30 @@
 #include <string.h>
 #include <stdint.h>
 
-#define LDR_PIN   PA6
-#define LED_PIN   PB6
+#define LDR_PIN PA6
+#define LDR_ADC_CHANNEL 6
+#define LDR_DARK_THRESHOLD 512
+#define LED_PIN PB6
 
 #define LCD_PORT PORTB
-#define LCD_DDR  DDRB
+#define LCD_DDR DDRB
 
-#define LCD_RST  PB0
-#define LCD_CE   PB4
-#define LCD_DC   PB1
-#define LCD_DIN  PB5
-#define LCD_CLK  PB7
+#define LCD_RST PB0
+#define LCD_CE PB4
+#define LCD_DC PB1
+#define LCD_DIN PB5
+#define LCD_CLK PB7
 
 #define BTN_PORT PORTA
-#define BTN_PIN  PINA
-#define BTN_DDR  DDRA
+#define BTN_PIN PINA
+#define BTN_DDR DDRA
 
-#define BTN_UP     PA0
-#define BTN_DOWN   PA1
-#define BTN_LEFT   PA2
-#define BTN_RIGHT  PA3
-#define BTN_A      PA4
-#define BTN_B      PA5
+#define BTN_UP PA0
+#define BTN_DOWN PA1
+#define BTN_LEFT PA2
+#define BTN_RIGHT PA3
+#define BTN_A PA4
+#define BTN_B PA5
 
 #define BTN_MASK ((1 << BTN_UP) | (1 << BTN_DOWN) | (1 << BTN_LEFT) | (1 << BTN_RIGHT) | (1 << BTN_A) | (1 << BTN_B))
 
@@ -36,14 +38,14 @@
 #define GAME_TICK_MS 180
 #define BTN_DEBOUNCE_TICKS 2
 
-#define LCD_WIDTH   84
-#define LCD_HEIGHT  48
+#define LCD_WIDTH 84
+#define LCD_HEIGHT 48
 static uint8_t lcd_buffer[504];
 
-#define CELL_SIZE   4
-#define GRID_W (LCD_WIDTH / CELL_SIZE)   // 21
-#define GRID_H (LCD_HEIGHT / CELL_SIZE)  // 12
-#define MAX_SNAKE   64
+#define CELL_SIZE 4
+#define GRID_W (LCD_WIDTH / CELL_SIZE) // 21
+#define GRID_H (LCD_HEIGHT / CELL_SIZE) // 12
+#define MAX_SNAKE 64
 
 #define EEPROM_ADDR 0x50
 
@@ -912,11 +914,24 @@ static void end_game_draw(void){
     lcd_update();
 }
 
+static uint16_t adc_read(uint8_t channel) {
+    ADMUX = (ADMUX & 0xE0) | (channel & 0x1F);
+    ADCSRA |= (1 << ADSC);
+    while (ADCSRA & (1 << ADSC)) {
+    }
+    return ADC;
+}
+
 static void ldr_led_init(void) {
-    // PD6 como entrada
+    // PA6/ADC6 como entrada analogica
     DDRA &= ~(1 << LDR_PIN);
     // Pull-up interno desactivado
     PORTA &= ~(1 << LDR_PIN);
+
+    // ADC habilitado, referencia AVCC, prescaler /128
+    ADMUX = (1 << REFS0) | (LDR_ADC_CHANNEL & 0x1F);
+    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
+    (void)adc_read(LDR_ADC_CHANNEL);
 
     // PB6 como salida
     DDRB |= (1 << LED_PIN);
@@ -925,8 +940,9 @@ static void ldr_led_init(void) {
 }
 
 static void ldr_led_update(void) {
-    // Si PD6 lee 1, asumimos poca luz
-    if (PINA & (1 << LDR_PIN)) {
+    // Lectura alta = poca luz, segun el divisor usado
+    uint16_t ldr_value = adc_read(LDR_ADC_CHANNEL);
+    if (ldr_value >= LDR_DARK_THRESHOLD) {
         PORTB |= (1 << LED_PIN);   // prende LED
     } else {
         PORTB &= ~(1 << LED_PIN);  // apaga LED
